@@ -1,0 +1,290 @@
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Shield, Lock } from 'lucide-react'
+import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+
+function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn }) {
+  const [formData, setFormData] = useState({
+    itemName: '',
+    price: '',
+    sellerMoMo: '',
+    buyerEmail: '',
+  })
+
+  const [errors, setErrors] = useState({})
+  const [loading, setLoading] = useState(false)
+
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+  }
+
+  const SERVICE_FEE_RATE = 0.01 // 1% service fee (SafeLink)
+
+  const validateForm = () => {
+    const newErrors = {}
+    
+    if (!formData.itemName.trim()) {
+      newErrors.itemName = 'Item name is required'
+    }
+    
+    if (!formData.price || parseFloat(formData.price) <= 0) {
+      newErrors.price = 'Valid price is required'
+    } else {
+      const totalToPay = parseFloat(formData.price) * (1 + SERVICE_FEE_RATE)
+      if (totalToPay > (availableBalance ?? Infinity)) {
+        newErrors.price = 'Insufficient balance'
+      }
+    }
+    
+    if (!formData.sellerMoMo.trim()) {
+      newErrors.sellerMoMo = 'Seller MoMo number is required'
+    } else if (!/^0\d{9}$/.test(formData.sellerMoMo.replace(/\s/g, ''))) {
+      newErrors.sellerMoMo = 'Invalid MoMo number format'
+    }
+
+    if (!formData.buyerEmail.trim()) {
+      newErrors.buyerEmail = 'Buyer email is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.buyerEmail)) {
+      newErrors.buyerEmail = 'Invalid email address'
+    }
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const generateSafeLink = () => {
+    const timestamp = Date.now()
+    const randomId = Math.random().toString(36).substring(2, 9)
+    return `safelink.gh/${timestamp}-${randomId}`
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!validateForm()) return
+
+    setLoading(true)
+    try {
+      const price = parseFloat(formData.price)
+      const serviceFee = price * SERVICE_FEE_RATE
+      const totalToPay = price + serviceFee
+      const safeLink = generateSafeLink()
+
+      // Update local UI / balances
+      onDealCreated({
+        ...formData,
+        price,
+        serviceFee,
+        totalToPay,
+        safeLink,
+        timestamp: new Date().toISOString()
+      })
+
+      // Call backend to initialize Paystack payment
+      const response = await fetch(`${API_BASE}/api/deals/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          itemName: formData.itemName,
+          price,
+          sellerMoMo: formData.sellerMoMo,
+          buyerEmail: formData.buyerEmail
+        })
+      })
+
+      if (!response.ok) {
+        console.error('Failed to create deal on backend', await response.text())
+        return
+      }
+
+      const data = await response.json()
+      if (data.authorizationUrl) {
+        if (Capacitor.isNativePlatform()) {
+          await Browser.open({ url: data.authorizationUrl })
+          const listener = await Browser.addListener('browserFinished', () => {
+            listener.remove()
+            onPaymentReturn?.()
+          })
+        } else {
+          window.location.href = data.authorizationUrl
+        }
+      } else {
+        console.error('No authorizationUrl returned from backend', data)
+      }
+    } catch (err) {
+      console.error('Error creating deal / initializing Paystack', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-deep-black text-white">
+      {/* Header */}
+      <div className="bg-charcoal/50 backdrop-blur-sm border-b border-ghana-gold/20 px-6 pt-12 pb-6">
+        <div className="flex items-center gap-4 mb-4">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onBack}
+            className="p-2 hover:bg-charcoal rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-6 h-6 text-ghana-gold" />
+          </motion.button>
+          <div>
+            <h2 className="text-2xl font-bold text-ghana-gold">New Secure Deal</h2>
+            <p className="text-gray-400 text-sm mt-1">Create an escrow transaction</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="px-6 mt-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Item Name */}
+          <div>
+            <label className="block text-gray-300 text-sm font-medium mb-2">
+              Item Name
+            </label>
+            <input
+              type="text"
+              name="itemName"
+              value={formData.itemName}
+              onChange={handleChange}
+              placeholder="e.g., iPhone 13 Pro"
+              className={`w-full bg-charcoal/50 border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ghana-gold focus:border-transparent ${
+                errors.itemName ? 'border-red-500' : 'border-gray-700'
+              }`}
+            />
+            {errors.itemName && (
+              <p className="text-red-400 text-xs mt-1">{errors.itemName}</p>
+            )}
+          </div>
+
+          {/* Price */}
+          <div>
+            <label className="block text-gray-300 text-sm font-medium mb-2">
+              Price (GHS)
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ghana-gold font-semibold">
+                GHS
+              </span>
+              <input
+                type="number"
+                name="price"
+                value={formData.price}
+                onChange={handleChange}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                className={`w-full bg-charcoal/50 border rounded-xl pl-16 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ghana-gold focus:border-transparent ${
+                  errors.price ? 'border-red-500' : 'border-gray-700'
+                }`}
+              />
+            </div>
+            {errors.price && (
+              <p className="text-red-400 text-xs mt-1">{errors.price}</p>
+            )}
+          </div>
+
+          {/* Seller MoMo Number */}
+          <div>
+            <label className="block text-gray-300 text-sm font-medium mb-2">
+              Seller's MoMo Number
+            </label>
+            <input
+              type="tel"
+              name="sellerMoMo"
+              value={formData.sellerMoMo}
+              onChange={handleChange}
+              placeholder="0XX XXX XXXX"
+              className={`w-full bg-charcoal/50 border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ghana-gold focus:border-transparent ${
+                errors.sellerMoMo ? 'border-red-500' : 'border-gray-700'
+              }`}
+            />
+            {errors.sellerMoMo && (
+              <p className="text-red-400 text-xs mt-1">{errors.sellerMoMo}</p>
+            )}
+            <p className="text-gray-500 text-xs mt-1">
+              The seller will receive payment once you confirm receipt
+            </p>
+          </div>
+
+          {/* Buyer Email */}
+          <div>
+            <label className="block text-gray-300 text-sm font-medium mb-2">
+              Your Email (for Paystack receipt)
+            </label>
+            <input
+              type="email"
+              name="buyerEmail"
+              value={formData.buyerEmail}
+              onChange={handleChange}
+              placeholder="you@example.com"
+              className={`w-full bg-charcoal/50 border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ghana-gold focus:border-transparent ${
+                errors.buyerEmail ? 'border-red-500' : 'border-gray-700'
+              }`}
+            />
+            {errors.buyerEmail && (
+              <p className="text-red-400 text-xs mt-1">{errors.buyerEmail}</p>
+            )}
+          </div>
+
+          {/* Security Info */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="bg-ghana-gold/10 border border-ghana-gold/30 rounded-xl p-4 flex items-start gap-3"
+          >
+            <Shield className="w-5 h-5 text-ghana-gold flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-gray-200 font-medium mb-1">Secure Escrow Protection</p>
+              <p className="text-xs text-gray-400">
+                Funds will be held securely until you confirm the item is received. 
+                The seller cannot access the funds until you approve.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Submit Button */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            type="submit"
+            disabled={loading}
+            className={`w-full bg-ghana-gold text-deep-black font-bold py-4 rounded-xl shadow-lg shadow-ghana-gold/20 flex items-center justify-center gap-2 mt-8 ${
+              loading ? 'opacity-70 cursor-not-allowed' : ''
+            }`}
+          >
+            <Lock className="w-5 h-5" />
+            <span>{loading ? 'Connecting to Paystack…' : 'Generate SafeLink'}</span>
+          </motion.button>
+        </motion.div>
+      </form>
+    </div>
+  )
+}
+
+export default NewDealForm

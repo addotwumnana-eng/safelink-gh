@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SafeLink Ghana - Secure Escrow & Payments</title>
+    <style>
+      html, body, #root { background: #0a0a0a !important; color: #fff !important; }
+      body { margin: 0 !important; min-height: 100vh !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; }
+      #root { min-height: 100vh !important; }
+    </style>
+  </head>
+  <style>
+    html, body, #root { background: #0a0a0a !important; color: #fff !important; }
+    body { margin: 0 !important; min-height: 100vh !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; }
+    #root { min-height: 100vh !important; }
+    /* Ghana Gold */
+    .text-ghana-gold { color: #FFD700 !important; }
+    .bg-ghana-gold { background-color: #FFD700 !important; }
+    .bg-ghana-gold\/10 { background-color: rgba(255,215,0,0.1) !important; }
+    .bg-ghana-gold\/20 { background-color: rgba(255,215,0,0.2) !important; }
+    .border-ghana-gold { border-color: #FFD700 !important; }
+    .border-ghana-gold\/20 { border-color: rgba(255,215,0,0.2) !important; }
+    .border-ghana-gold\/30 { border-color: rgba(255,215,0,0.3) !important; }
+    .border-ghana-gold\/50 { border-color: rgba(255,215,0,0.5) !important; }
+    .text-ghana-gold\/80 { color: rgba(255,215,0,0.8) !important; }
+    .shadow-ghana-gold\/20 { box-shadow: 0 10px 15px -3px rgba(255,215,0,0.2), 0 4px 6px -4px rgba(255,215,0,0.2) !important; }
+    .focus\:ring-ghana-gold:focus { --tw-ring-color: #FFD700 !important; box-shadow: 0 0 0 2px #FFD700 !important; }
+    .hover\:bg-ghana-gold\/10:hover { background-color: rgba(255,215,0,0.1) !important; }
+    .hover\:border-ghana-gold\/50:hover { border-color: rgba(255,215,0,0.5) !important; }
+  </style>
+  <body style="background:#0a0a0a;color:#fff;margin:0;min-height:100vh;">
+    <div id="root"></div>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        corePlugins: { preflight: false },
+        theme: {
+          extend: {
+            colors: {
+              'ghana-gold': '#FFD700',
+              'charcoal': '#1a1a1a',
+              'deep-black': '#0a0a0a',
+            }
+          }
+        }
+      }
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
