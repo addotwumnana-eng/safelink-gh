@@ -1,0 +1,3 @@
+# Railway: run the Node backend (used when Root Directory = backend)
+[deploy]
+startCommand = "npm start"
