@@ -38,6 +38,6 @@ app.get('/api/test', (req, res) => {
 // Deals / escrow routes
 app.use('/api/deals', dealsRouter)
 
-app.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Backend server running on http://0.0.0.0:${PORT}`)
 })
