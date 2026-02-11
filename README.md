@@ -77,6 +77,24 @@ To preview the production build:
 npm run preview
 ```
 
+## Android Studio (Capacitor)
+
+After changing frontend env/config (like `VITE_API_BASE_URL`), re-sync Android:
+
+```bash
+npm install
+cp .env.example .env
+# edit .env (set VITE_API_BASE_URL)
+npm run android:sync
+```
+
+Then open **the `android/` folder** in Android Studio.
+
+If Android Studio says it can’t find the Android SDK:
+- Android Studio → **Settings** → **Android SDK** (install it)
+- or set `ANDROID_HOME`
+- or let Android Studio generate `android/local.properties` (do not commit it)
+
 ## Production & Paystack callback (Android app)
 
 For the **mobile app**, Paystack redirects the user to your frontend after payment. That URL must be your **deployed** site so the in-app browser can load it and then close, returning the user to the app.
