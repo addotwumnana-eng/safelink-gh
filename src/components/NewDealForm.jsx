@@ -129,7 +129,9 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
       onDealCreated?.({ deal, authorizationUrl, includeELevy })
     } catch (err) {
       console.error('Error creating deal / initializing Paystack', err)
-      setSubmitError('Network error. Make sure the backend is running on http://localhost:3001.')
+      setSubmitError(
+        `Network/CORS error. Confirm backend is reachable at ${API_BASE} and that CORS allows your frontend URL.`
+      )
       showToast?.('Network error talking to backend')
     } finally {
       setLoading(false)
