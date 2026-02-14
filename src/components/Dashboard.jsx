@@ -18,6 +18,24 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
     return 'bg-orange-400/10 border-orange-400/30'
   }
 
+  const getStatusMeta = (status) => {
+    switch (status) {
+      case 'pending_payment':
+        return { label: 'Pending payment', pill: 'bg-slate-700/60 text-slate-300' }
+      case 'paid':
+      case 'active':
+        return { label: 'In escrow', pill: 'bg-ghana-gold/20 text-ghana-gold' }
+      case 'disputed':
+        return { label: 'Disputed', pill: 'bg-amber-900/30 text-amber-400' }
+      case 'cancelled':
+        return { label: 'Cancelled', pill: 'bg-red-900/30 text-red-400' }
+      case 'completed':
+        return { label: 'Completed', pill: 'bg-emerald-900/25 text-emerald-300' }
+      default:
+        return { label: status || 'Unknown', pill: 'bg-gray-700 text-gray-300' }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-deep-black text-white pb-8">
       {/* Header */}
@@ -214,7 +232,7 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
         ) : (
           <div className="space-y-3">
             {[...deals]
-              .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+              .sort((a, b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0))
               .map((deal) => (
                 <div
                   key={deal.id}
@@ -222,37 +240,44 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
                 >
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-white font-medium">{deal.itemName}</span>
+                    {(() => {
+                      const meta = getStatusMeta(deal.status)
+                      return (
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full ${
-                        deal.status === 'active'
-                          ? 'bg-ghana-gold/20 text-ghana-gold'
-                          : deal.status === 'disputed'
-                          ? 'bg-amber-900/30 text-amber-400'
-                          : deal.status === 'cancelled'
-                          ? 'bg-red-900/30 text-red-400'
-                          : 'bg-gray-700 text-gray-400'
+                        meta.pill
                       }`}
                     >
-                      {deal.status === 'active' ? 'Active' : deal.status === 'disputed' ? 'Disputed' : deal.status === 'cancelled' ? 'Cancelled' : 'Completed'}
+                      {meta.label}
                     </span>
+                      )
+                    })()}
                   </div>
                   <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
                     <span>GHS {(deal.totalToPay ?? deal.price).toFixed(2)}</span>
                     <span className="font-mono text-xs truncate max-w-[140px]" title={deal.safeLink || deal.id}>
-                      {deal.safeLink ? deal.safeLink.replace('safelink.gh/', '') : deal.id.substring(0, 8)}
+                      {deal.id?.substring(0, 8)}
                     </span>
                   </div>
-                  {(deal.status === 'paid' || deal.status === 'active') && (
+                  <div className="mt-2 space-y-2">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => onViewSafeLink(deal)}
+                      className="w-full py-2 rounded-lg bg-charcoal/80 text-ghana-gold text-sm font-medium border border-ghana-gold/40 flex items-center justify-center gap-2"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      View SafeLink
+                    </motion.button>
+
+                    {deal.status === 'pending_payment' && (
+                      <p className="text-xs text-gray-400">
+                        Complete payment to lock funds in escrow (SafeLink will update automatically after Paystack confirms).
+                      </p>
+                    )}
+
+                    {(deal.status === 'paid' || deal.status === 'active') && (
                     <div className="mt-2 space-y-2">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => onViewSafeLink(deal)}
-                        className="w-full py-2 rounded-lg bg-charcoal/80 text-ghana-gold text-sm font-medium border border-ghana-gold/40 flex items-center justify-center gap-2"
-                      >
-                        <Link2 className="w-4 h-4" />
-                        View SafeLink
-                      </motion.button>
                       {deal.status === 'paid' && (
                         <motion.button
                           whileHover={{ scale: 1.02 }}
@@ -279,47 +304,54 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
                       >
                         Dispute
                       </motion.button>
-                      {(deal.status === 'paid' || deal.status === 'pending_payment') && (
+                    </div>
+                  )}
+
+                    {(deal.status === 'paid' || deal.status === 'pending_payment') && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          if (window.confirm('Cancel this deal? Funds will be returned.')) {
+                            onCancelDeal(deal.id)
+                          }
+                        }}
+                        className="w-full py-2 rounded-lg text-red-400/90 text-sm border border-red-400/30 hover:bg-red-900/20"
+                      >
+                        Cancel deal
+                      </motion.button>
+                    )}
+
+                    {deal.status === 'disputed' && (
+                      <>
+                        <p className="text-xs text-amber-400/80">Resolve dispute:</p>
                         <motion.button
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={() => {
-                            if (window.confirm('Cancel this deal? Funds will be returned.')) {
-                              onCancelDeal(deal.id)
+                            if (window.confirm('Refund yourself? Funds will return to your balance.')) {
+                              onResolveDisputeRefund(deal.id)
                             }
                           }}
-                          className="w-full py-2 rounded-lg text-red-400/90 text-sm border border-red-400/30 hover:bg-red-900/20"
+                          className="w-full py-2 rounded-lg bg-charcoal/80 text-amber-400 text-sm font-medium border border-amber-400/40"
                         >
-                          Cancel deal
+                          Refund me
                         </motion.button>
-                      )}
-                      <p className="text-xs text-amber-400/80">Resolve dispute:</p>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          if (window.confirm('Refund yourself? Funds will return to your balance.')) {
-                            onResolveDisputeRefund(deal.id)
-                          }
-                        }}
-                        className="w-full py-2 rounded-lg bg-charcoal/80 text-amber-400 text-sm font-medium border border-amber-400/40"
-                      >
-                        Refund me
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          if (window.confirm('Release funds to the seller?')) {
-                            onResolveDisputeRelease(deal.id)
-                          }
-                        }}
-                        className="w-full py-2 rounded-lg bg-ghana-gold/20 text-ghana-gold text-sm font-medium border border-ghana-gold/40"
-                      >
-                        Release to seller
-                      </motion.button>
-                    </div>
-                  )}
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            if (window.confirm('Release funds to the seller?')) {
+                              onResolveDisputeRelease(deal.id)
+                            }
+                          }}
+                          className="w-full py-2 rounded-lg bg-ghana-gold/20 text-ghana-gold text-sm font-medium border border-ghana-gold/40"
+                        >
+                          Release to seller
+                        </motion.button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
           </div>

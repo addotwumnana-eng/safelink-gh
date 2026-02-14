@@ -1,18 +1,14 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Copy, CheckCircle, Shield, Lock, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Copy, CheckCircle, Shield, Lock, ExternalLink, CreditCard } from 'lucide-react'
+import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 
-function SafeLinkDisplay({ linkData, onBack, showToast }) {
+function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaymentReturn }) {
   const [copied, setCopied] = useState(false)
 
-  // Generate verifyUrl from either safeLink or id (for backend deals)
-  const linkId = linkData.safeLink 
-    ? linkData.safeLink.replace('safelink.gh/', '') 
-    : linkData.id
-  const verifyUrl = `${window.location.origin}/v/${linkId}`
-  
-  // Generate display link
-  const displayLink = linkData.safeLink || `${window.location.origin}/v/${linkData.id}`
+  const verifyUrl = `${window.location.origin}/v/${linkData.id}`
+  const displayLink = verifyUrl
 
   const handleCopy = async () => {
     try {
@@ -27,6 +23,9 @@ function SafeLinkDisplay({ linkData, onBack, showToast }) {
 
   const getShareMessage = () => {
     const total = linkData.totalToPay ?? linkData.price
+    if (linkData.status === 'pending_payment') {
+      return `SafeLink created for ${linkData.itemName} (GHS ${total.toFixed(2)}). Payment pending — escrow activates after payment. Verify: ${verifyUrl}`
+    }
     return `Funds held in escrow for ${linkData.itemName} (GHS ${total.toFixed(2)} total). Verify: ${verifyUrl}`
   }
 
@@ -76,6 +75,24 @@ function SafeLinkDisplay({ linkData, onBack, showToast }) {
       })
     }
   }
+
+  const handleProceedToPayment = async () => {
+    if (!authorizationUrl) return
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: authorizationUrl })
+        const listener = await Browser.addListener('browserFinished', () => {
+          listener.remove()
+          onPaymentReturn?.()
+        })
+      } else {
+        window.location.href = authorizationUrl
+      }
+    } catch (err) {
+      console.error('Failed to open payment page', err)
+      showToast?.('Failed to open payment page')
+    }
+  }
   return (
     <div className="min-h-screen bg-deep-black text-white">
       {/* Header */}
@@ -109,6 +126,26 @@ function SafeLinkDisplay({ linkData, onBack, showToast }) {
           </div>
         </motion.div>
 
+        {linkData.status === 'pending_payment' && (
+          <div className="bg-slate-900/40 border border-slate-700/50 rounded-2xl p-5">
+            <p className="text-sm text-slate-200 font-semibold">Payment pending</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Share the SafeLink now, then complete payment to lock funds in escrow.
+            </p>
+            {authorizationUrl && (
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleProceedToPayment}
+                className="mt-4 w-full bg-ghana-gold text-deep-black font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              >
+                <CreditCard className="w-5 h-5" />
+                Proceed to payment
+              </motion.button>
+            )}
+          </div>
+        )}
+
         {/* Deal Summary */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -124,7 +161,7 @@ function SafeLinkDisplay({ linkData, onBack, showToast }) {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Price:</span>
-              <span className="text-white font-bold">GHS {linkData.price.toFixed(2)}</span>
+              <span className="text-white font-bold">GHS {Number(linkData.price).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Service fee (1%):</span>
@@ -190,7 +227,7 @@ function SafeLinkDisplay({ linkData, onBack, showToast }) {
               <h4 className="text-sm font-semibold text-gray-200 mb-2">How it works:</h4>
               <ol className="text-xs text-gray-400 space-y-2 list-decimal list-inside">
                 <li>Share this SafeLink with the seller</li>
-                <li>The seller can verify that funds are held in escrow</li>
+                <li>The seller can verify the deal status instantly</li>
                 <li>Once you receive the item, confirm in your dashboard</li>
                 <li>Funds will be released to the seller automatically</li>
               </ol>

@@ -56,9 +56,9 @@ function PaymentCallback() {
 
   return (
     <div className="min-h-screen bg-deep-black text-white flex items-center justify-center px-6">
-      <p className="text-sm text-ghana-gold text-center">
-        {message}
-      </p>
+      <div className="mobile-container">
+        <p className="text-sm text-ghana-gold text-center">{message}</p>
+      </div>
     </div>
   )
 }

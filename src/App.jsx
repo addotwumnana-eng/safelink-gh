@@ -20,10 +20,8 @@ function App() {
     return Number.isFinite(v) ? v : 0
   })
   const [generatedLink, setGeneratedLink] = useState(null)
+  const [authorizationUrl, setAuthorizationUrl] = useState(null)
   const [toastMessage, setToastMessage] = useState(null)
-
-  // Backend test state
-  const [backendMessage, setBackendMessage] = useState('Connecting to backend...')
 
   // Load deals from backend on mount
   useEffect(() => {
@@ -46,20 +44,6 @@ function App() {
     loadDeals()
   }, [])
 
-  // Call backend test endpoint once on mount
-  useEffect(() => {
-    fetch(`${API_BASE}/api/test`)
-      .then((res) => res.json())
-      .then((data) => {
-        console.log('Backend response:', data)
-        setBackendMessage(`Backend says: ${data.message || 'OK'}`)
-      })
-      .catch((err) => {
-        console.error('Error talking to backend:', err)
-        setBackendMessage('Failed to reach backend')
-      })
-  }, [])
-
   const showToast = (msg) => setToastMessage(msg)
 
   const trustScore = useMemo(() => {
@@ -70,8 +54,8 @@ function App() {
 
   // Calculate holding balance from backend deals
   useEffect(() => {
-    const paidDeals = deals.filter((d) => d.status === 'paid' || d.status === 'pending_payment')
-    const totalHolding = paidDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
+    const holdingDeals = deals.filter((d) => d.status === 'paid' || d.status === 'active' || d.status === 'disputed')
+    const totalHolding = holdingDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
     setHoldingBalance(totalHolding)
   }, [deals])
 
@@ -84,15 +68,18 @@ function App() {
     setCurrentView('newDeal')
   }
 
-  const handleDealCreated = (linkData) => {
-    setGeneratedLink(linkData)
-    showToast('Deal created! Redirecting to Paystack...')
+  const handleDealCreated = ({ deal, authorizationUrl: authUrl }) => {
+    setGeneratedLink(deal)
+    setAuthorizationUrl(authUrl || null)
+    setCurrentView('safeLink')
+    showToast('SafeLink generated. Share it, then complete payment to lock funds.')
   }
 
   const handlePaymentReturn = () => {
     refreshDeals().then(() => {
       setCurrentView('dashboard')
       setGeneratedLink(null)
+      setAuthorizationUrl(null)
       showToast('Payment complete! Check My Deals.')
     })
   }
@@ -196,12 +183,14 @@ function App() {
 
   const handleViewSafeLink = (deal) => {
     setGeneratedLink(deal)
+    setAuthorizationUrl(null)
     setCurrentView('safeLink')
   }
 
   const handleBackToDashboard = () => {
     setCurrentView('dashboard')
     setGeneratedLink(null)
+    setAuthorizationUrl(null)
   }
 
   return (
@@ -245,7 +234,6 @@ function App() {
               availableBalance={availableBalance}
               onDealCreated={handleDealCreated}
               onBack={handleBackToDashboard}
-              onPaymentReturn={handlePaymentReturn}
             />
           </motion.div>
         )}
@@ -260,17 +248,14 @@ function App() {
           >
             <SafeLinkDisplay
               linkData={generatedLink}
+              authorizationUrl={authorizationUrl}
               onBack={handleBackToDashboard}
               showToast={showToast}
+              onPaymentReturn={handlePaymentReturn}
             />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Show backend status at the bottom */}
-      <p className="text-xs text-emerald-400 mt-2 text-center">
-        {backendMessage}
-      </p>
 
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
     </div>
