@@ -6,7 +6,7 @@ import ELevyToggle from './ELevyToggle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
-function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate }) {
+function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate, showToast }) {
   const [formData, setFormData] = useState({
     itemName: '',
     price: '',
@@ -15,6 +15,7 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
   })
 
   const [errors, setErrors] = useState({})
+  const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
   const [localIncludeELevy, setLocalIncludeELevy] = useState(true)
   const includeELevy = typeof includeELevyEstimate === 'boolean' ? includeELevyEstimate : localIncludeELevy
@@ -86,6 +87,7 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
     if (!validateForm()) return
 
     setLoading(true)
+    setSubmitError('')
     try {
       const price = parseFloat(formData.price)
 
@@ -104,7 +106,10 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
       })
 
       if (!response.ok) {
-        console.error('Failed to create deal on backend', await response.text())
+        const text = await response.text()
+        console.error('Failed to create deal on backend', text)
+        setSubmitError('Could not create deal. Check that the backend is running and reachable.')
+        showToast?.('Failed to create deal (backend error)')
         return
       }
 
@@ -112,8 +117,10 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
       const deal = data?.deal
       const authorizationUrl = data?.authorizationUrl
 
-      if (!deal || !authorizationUrl) {
-        console.error('Missing deal or authorizationUrl from backend', data)
+      if (!deal) {
+        console.error('Missing deal from backend', data)
+        setSubmitError('Could not create deal (invalid backend response).')
+        showToast?.('Failed to create deal')
         return
       }
 
@@ -122,6 +129,8 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
       onDealCreated?.({ deal, authorizationUrl, includeELevy })
     } catch (err) {
       console.error('Error creating deal / initializing Paystack', err)
+      setSubmitError('Network error. Make sure the backend is running on http://localhost:3001.')
+      showToast?.('Network error talking to backend')
     } finally {
       setLoading(false)
     }
@@ -304,6 +313,10 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
             <Lock className="w-5 h-5" />
             <span>{loading ? 'Creating SafeLink…' : 'Generate SafeLink'}</span>
           </motion.button>
+
+          {submitError && (
+            <p className="text-red-400 text-xs mt-3 text-center">{submitError}</p>
+          )}
         </motion.div>
       </form>
     </div>

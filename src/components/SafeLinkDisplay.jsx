@@ -139,7 +139,7 @@ function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaym
             <p className="text-xs text-slate-400 mt-1">
               Share the SafeLink now, then complete payment to lock funds in escrow.
             </p>
-            {authorizationUrl && (
+            {authorizationUrl ? (
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -149,6 +149,14 @@ function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaym
                 <CreditCard className="w-5 h-5" />
                 Proceed to payment
               </motion.button>
+            ) : (
+              <div className="mt-4 rounded-xl border border-slate-700/60 bg-black/20 p-4">
+                <p className="text-xs text-slate-300 font-medium">Payments not configured</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  SafeLink was generated, but Paystack is not configured on the backend yet.
+                  Add `PAYSTACK_SECRET_KEY` to `backend/.env` to enable payments.
+                </p>
+              </div>
             )}
           </div>
         )}

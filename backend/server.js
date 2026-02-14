@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3001
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:5173',
+  'http://127.0.0.1:5173',
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',
@@ -18,7 +19,12 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true)
+    // Allow common local dev origins (Vite may use different ports/hosts).
+    const isLocalDev =
+      typeof origin === 'string' &&
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+
+    if (!origin || allowedOrigins.includes(origin) || isLocalDev) return cb(null, true)
     return cb(null, false)
   },
   credentials: true,

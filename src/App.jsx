@@ -247,6 +247,7 @@ function App() {
               onBack={handleBackToDashboard}
               includeELevyEstimate={includeELevyEstimate}
               onToggleELevyEstimate={setIncludeELevyEstimate}
+              showToast={showToast}
             />
           </motion.div>
         )}
