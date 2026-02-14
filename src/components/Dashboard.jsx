@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Shield, Lock, CheckCircle, FileText, Plus, X, Link2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import MoMoOptimizer from './MoMoOptimizer'
+import ELevyToggle from './ELevyToggle'
 
-function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadingDeals, onConfirmReceipt, onCancelDeal, onDispute, onResolveDisputeRefund, onResolveDisputeRelease, onTopUp, onViewSafeLink, onNewDeal }) {
+function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadingDeals, includeELevyEstimate, onToggleELevyEstimate, onConfirmReceipt, onCancelDeal, onDispute, onResolveDisputeRefund, onResolveDisputeRelease, onTopUp, onViewSafeLink, onNewDeal }) {
   const [showTopUpModal, setShowTopUpModal] = useState(false)
   const [topUpAmount, setTopUpAmount] = useState('')
   const getTrustScoreColor = (score) => {
@@ -207,7 +208,14 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
         transition={{ delay: 0.4 }}
         className="mx-6 mt-6"
       >
-        <MoMoOptimizer />
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs text-gray-400">
+            E‑Levy estimates
+            <span className="ml-2 text-gray-600">({includeELevyEstimate ? 'On' : 'Off'})</span>
+          </div>
+          <ELevyToggle checked={includeELevyEstimate} onChange={onToggleELevyEstimate} size="sm" />
+        </div>
+        <MoMoOptimizer includeELevyEstimate={includeELevyEstimate} onToggleELevyEstimate={onToggleELevyEstimate} />
       </motion.div>
 
       {/* My Deals */}

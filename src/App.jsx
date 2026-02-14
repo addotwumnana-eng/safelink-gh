@@ -22,6 +22,11 @@ function App() {
   const [generatedLink, setGeneratedLink] = useState(null)
   const [authorizationUrl, setAuthorizationUrl] = useState(null)
   const [toastMessage, setToastMessage] = useState(null)
+  const [includeELevyEstimate, setIncludeELevyEstimate] = useState(() => {
+    const raw = localStorage.getItem('safelink_include_e_levy_estimate')
+    if (raw === null) return true
+    return raw === 'true'
+  })
 
   // Load deals from backend on mount
   useEffect(() => {
@@ -43,6 +48,10 @@ function App() {
 
     loadDeals()
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem('safelink_include_e_levy_estimate', String(includeELevyEstimate))
+  }, [includeELevyEstimate])
 
   const showToast = (msg) => setToastMessage(msg)
 
@@ -210,6 +219,8 @@ function App() {
               holdingBalance={holdingBalance}
               deals={deals}
               loadingDeals={loadingDeals}
+              includeELevyEstimate={includeELevyEstimate}
+              onToggleELevyEstimate={setIncludeELevyEstimate}
               onConfirmReceipt={handleConfirmReceipt}
               onCancelDeal={handleCancelDeal}
               onDispute={handleDispute}
@@ -234,6 +245,8 @@ function App() {
               availableBalance={availableBalance}
               onDealCreated={handleDealCreated}
               onBack={handleBackToDashboard}
+              includeELevyEstimate={includeELevyEstimate}
+              onToggleELevyEstimate={setIncludeELevyEstimate}
             />
           </motion.div>
         )}
@@ -252,6 +265,8 @@ function App() {
               onBack={handleBackToDashboard}
               showToast={showToast}
               onPaymentReturn={handlePaymentReturn}
+              includeELevyEstimate={includeELevyEstimate}
+              onToggleELevyEstimate={setIncludeELevyEstimate}
             />
           </motion.div>
         )}

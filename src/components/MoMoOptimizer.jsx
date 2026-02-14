@@ -6,11 +6,13 @@ import {
   DEFAULT_SERVICE_FEE_RATE,
   calculateMoMoCosts,
 } from '../utils/fees'
+import ELevyToggle from './ELevyToggle'
 
-function MoMoOptimizer() {
+function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
   const [amount, setAmount] = useState('')
   const [showDetails, setShowDetails] = useState(false)
-  const [includeELevy, setIncludeELevy] = useState(true)
+  const [localIncludeELevy, setLocalIncludeELevy] = useState(true)
+  const includeELevy = typeof includeELevyEstimate === 'boolean' ? includeELevyEstimate : localIncludeELevy
 
   const costs = calculateMoMoCosts({
     amount: parseFloat(amount || '0'),
@@ -18,6 +20,14 @@ function MoMoOptimizer() {
     eLevyRate: DEFAULT_E_LEVY_RATE,
     includeELevy,
   })
+
+  const setInclude = (next) => {
+    if (typeof includeELevyEstimate === 'boolean') {
+      onToggleELevyEstimate?.(next)
+    } else {
+      setLocalIncludeELevy(next)
+    }
+  }
 
   return (
     <motion.div
@@ -68,12 +78,12 @@ function MoMoOptimizer() {
               <span className="text-gray-400 text-sm">SafeLink service fee (1%):</span>
               <span className="text-orange-400 font-medium">+GHS {costs.serviceFee.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-400 text-sm">E‑Levy ({Math.round(DEFAULT_E_LEVY_RATE * 100)}%):</span>
-              <span className="text-orange-400 font-medium">
-                {includeELevy ? `+GHS ${costs.eLevy.toFixed(2)}` : '—'}
-              </span>
-            </div>
+            {includeELevy && (
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-400 text-sm">E‑Levy ({Math.round(DEFAULT_E_LEVY_RATE * 100)}%):</span>
+                <span className="text-orange-400 font-medium">+GHS {costs.eLevy.toFixed(2)}</span>
+              </div>
+            )}
             <div className="border-t border-gray-800 pt-2 mt-2">
               <div className="flex justify-between items-center">
                 <span className="text-gray-300 font-medium">Estimated total debit:</span>
@@ -82,15 +92,13 @@ function MoMoOptimizer() {
             </div>
           </div>
 
-          <label className="flex items-center justify-between gap-3 bg-charcoal/30 rounded-xl p-4 border border-gray-800/50">
-            <span className="text-sm text-gray-300">Include E‑Levy estimate</span>
-            <input
-              type="checkbox"
-              checked={includeELevy}
-              onChange={(e) => setIncludeELevy(e.target.checked)}
-              className="h-5 w-5 accent-ghana-gold"
-            />
-          </label>
+          <div className="flex items-center justify-between gap-3 bg-charcoal/30 rounded-xl p-4 border border-gray-800/50">
+            <div>
+              <p className="text-sm text-gray-200 font-medium">E‑Levy estimate</p>
+              <p className="text-xs text-gray-500 mt-0.5">Toggle to add/remove the estimate</p>
+            </div>
+            <ELevyToggle checked={includeELevy} onChange={setInclude} />
+          </div>
 
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -110,10 +118,12 @@ function MoMoOptimizer() {
               <p>
                 <strong className="text-gray-300">SafeLink service fee:</strong> 1% of the deal amount (charged by SafeLink).
               </p>
-              <p>
-                <strong className="text-gray-300">E‑Levy:</strong> Modeled at {Math.round(DEFAULT_E_LEVY_RATE * 100)}% of the deal amount.
-                Actual levy can vary by channel/provider and exemptions.
-              </p>
+              {includeELevy && (
+                <p>
+                  <strong className="text-gray-300">E‑Levy:</strong> Modeled at {Math.round(DEFAULT_E_LEVY_RATE * 100)}% of the deal amount.
+                  Actual levy can vary by channel/provider and exemptions.
+                </p>
+              )}
               <p>
                 <strong className="text-gray-300">Total to lock:</strong> GHS {costs.totalToLock.toFixed(2)} (amount + SafeLink fee).
               </p>

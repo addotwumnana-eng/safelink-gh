@@ -3,12 +3,19 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, CheckCircle, Shield, Lock, ExternalLink, CreditCard } from 'lucide-react'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
+import { DEFAULT_E_LEVY_RATE, calculateMoMoCosts } from '../utils/fees'
+import ELevyToggle from './ELevyToggle'
 
-function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaymentReturn }) {
+function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaymentReturn, includeELevyEstimate, onToggleELevyEstimate }) {
   const [copied, setCopied] = useState(false)
 
   const verifyUrl = `${window.location.origin}/v/${linkData.id}`
   const displayLink = verifyUrl
+
+  const eLevy = calculateMoMoCosts({
+    amount: Number(linkData.price || 0),
+    includeELevy: true,
+  }).eLevy
 
   const handleCopy = async () => {
     try {
@@ -171,10 +178,25 @@ function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaym
               <span className="text-gray-400">Total to pay:</span>
               <span className="text-white font-bold text-lg">GHS {(linkData.totalToPay ?? linkData.price).toFixed(2)}</span>
             </div>
+            {includeELevyEstimate && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">E‑Levy estimate:</span>
+                <span className="text-orange-400 font-medium">
+                  +GHS {eLevy.toFixed(2)} <span className="text-xs text-gray-500">(modeled {Math.round(DEFAULT_E_LEVY_RATE * 100)}%)</span>
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Seller MoMo:</span>
               <span className="text-white font-medium">{linkData.sellerMoMo}</span>
             </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between bg-charcoal/30 border border-gray-800/50 rounded-xl p-3">
+            <div>
+              <p className="text-xs text-gray-300 font-medium">Show E‑Levy estimate</p>
+              <p className="text-[11px] text-gray-500">Add/remove the estimate on this screen</p>
+            </div>
+            <ELevyToggle checked={!!includeELevyEstimate} onChange={onToggleELevyEstimate} size="sm" />
           </div>
         </motion.div>
 
