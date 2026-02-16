@@ -125,7 +125,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
                 </p>
               )}
               <p>
-                <strong className="text-gray-300">Total to lock:</strong> GHS {costs.totalToLock.toFixed(2)} (amount + SafeLink fee).
+                <strong className="text-gray-300">Total to lock:</strong> GHS {costs.totalToLock.toFixed(2)} (amount + service fee).
               </p>
             </motion.div>
           )}
