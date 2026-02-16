@@ -11,14 +11,6 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard')
   const [deals, setDeals] = useState([])
   const [loadingDeals, setLoadingDeals] = useState(true)
-  const [availableBalance, setAvailableBalance] = useState(() => {
-    const v = parseFloat(localStorage.getItem('safelink_available_balance'))
-    return Number.isFinite(v) ? v : 1250.5
-  })
-  const [holdingBalance, setHoldingBalance] = useState(() => {
-    const v = parseFloat(localStorage.getItem('safelink_holding_balance'))
-    return Number.isFinite(v) ? v : 0
-  })
   const [generatedLink, setGeneratedLink] = useState(null)
   const [authorizationUrl, setAuthorizationUrl] = useState(null)
   const [toastMessage, setToastMessage] = useState(null)
@@ -61,17 +53,12 @@ function App() {
     return Math.min(100, Math.max(0, 50 + completed * 5 - cancelled * 10))
   }, [deals])
 
-  // Calculate holding balance from backend deals
-  useEffect(() => {
-    const holdingDeals = deals.filter((d) => d.status === 'paid' || d.status === 'active' || d.status === 'disputed')
-    const totalHolding = holdingDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
-    setHoldingBalance(totalHolding)
+  const holdingBalance = useMemo(() => {
+    const holdingDeals = deals.filter(
+      (d) => d.status === 'paid' || d.status === 'active' || d.status === 'disputed'
+    )
+    return holdingDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
   }, [deals])
-
-  useEffect(() => {
-    localStorage.setItem('safelink_available_balance', String(availableBalance))
-    localStorage.setItem('safelink_holding_balance', String(holdingBalance))
-  }, [availableBalance, holdingBalance])
 
   const handleNewDeal = () => {
     setCurrentView('newDeal')
@@ -165,9 +152,6 @@ function App() {
   const handleResolveDisputeRefund = (dealId) => {
     const deal = deals.find((d) => d.id === dealId)
     if (!deal || deal.status !== 'disputed') return
-    const amount = deal.totalToPay ?? deal.price
-    setHoldingBalance((h) => h - amount)
-    setAvailableBalance((a) => a + amount)
     setDeals((d) =>
       d.map((x) => (x.id === dealId ? { ...x, status: 'cancelled' } : x))
     )
@@ -177,17 +161,10 @@ function App() {
   const handleResolveDisputeRelease = (dealId) => {
     const deal = deals.find((d) => d.id === dealId)
     if (!deal || deal.status !== 'disputed') return
-    const amount = deal.totalToPay ?? deal.price
-    setHoldingBalance((h) => h - amount)
     setDeals((d) =>
       d.map((x) => (x.id === dealId ? { ...x, status: 'completed' } : x))
     )
     showToast('Dispute resolved. Funds released to seller.')
-  }
-
-  const handleTopUp = (amount) => {
-    setAvailableBalance((a) => a + amount)
-    showToast('Funds added')
   }
 
   const handleViewSafeLink = (deal) => {
@@ -215,7 +192,6 @@ function App() {
           >
             <Dashboard
               trustScore={trustScore}
-              availableBalance={availableBalance}
               holdingBalance={holdingBalance}
               deals={deals}
               loadingDeals={loadingDeals}
@@ -226,7 +202,6 @@ function App() {
               onDispute={handleDispute}
               onResolveDisputeRefund={handleResolveDisputeRefund}
               onResolveDisputeRelease={handleResolveDisputeRelease}
-              onTopUp={handleTopUp}
               onViewSafeLink={handleViewSafeLink}
               onNewDeal={handleNewDeal}
             />
@@ -242,7 +217,6 @@ function App() {
             transition={{ duration: 0.3 }}
           >
             <NewDealForm
-              availableBalance={availableBalance}
               onDealCreated={handleDealCreated}
               onBack={handleBackToDashboard}
               includeELevyEstimate={includeELevyEstimate}

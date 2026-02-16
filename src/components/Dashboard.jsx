@@ -1,12 +1,10 @@
 import { useState } from 'react'
-import { Shield, Lock, CheckCircle, FileText, Plus, X, Link2 } from 'lucide-react'
+import { Shield, Lock, CheckCircle, FileText, Link2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import MoMoOptimizer from './MoMoOptimizer'
 import ELevyToggle from './ELevyToggle'
 
-function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadingDeals, includeELevyEstimate, onToggleELevyEstimate, onConfirmReceipt, onCancelDeal, onDispute, onResolveDisputeRefund, onResolveDisputeRelease, onTopUp, onViewSafeLink, onNewDeal }) {
-  const [showTopUpModal, setShowTopUpModal] = useState(false)
-  const [topUpAmount, setTopUpAmount] = useState('')
+function Dashboard({ trustScore, holdingBalance, deals, loadingDeals, includeELevyEstimate, onToggleELevyEstimate, onConfirmReceipt, onCancelDeal, onDispute, onResolveDisputeRefund, onResolveDisputeRelease, onViewSafeLink, onNewDeal }) {
   const getTrustScoreColor = (score) => {
     if (score >= 80) return 'text-ghana-gold'
     if (score >= 60) return 'text-yellow-400'
@@ -80,7 +78,7 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
       </motion.div>
 
       {/* Balance Cards */}
-      <div className="mx-6 mt-6 grid grid-cols-2 gap-4">
+      <div className="mx-6 mt-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -94,91 +92,7 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
           <p className="text-2xl font-bold text-white">GHS {holdingBalance.toFixed(2)}</p>
           <p className="text-xs text-gray-500 mt-1">Secured funds</p>
         </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-charcoal/50 rounded-2xl p-5 border border-gray-800/50"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="w-4 h-4 text-green-400" />
-            <span className="text-gray-400 text-sm">Available</span>
-          </div>
-          <p className="text-2xl font-bold text-white">GHS {availableBalance.toFixed(2)}</p>
-          <p className="text-xs text-gray-500 mt-1">Ready to use</p>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowTopUpModal(true)}
-            className="mt-2 w-full py-2 rounded-lg bg-ghana-gold text-white text-sm font-medium flex items-center justify-center gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            Top up
-          </motion.button>
-        </motion.div>
       </div>
-
-      {/* Top up Modal */}
-      <AnimatePresence>
-        {showTopUpModal && (
-          <motion.div
-            key="topUpModal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowTopUpModal(false)}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-charcoal border border-gray-700 rounded-2xl p-6 w-full max-w-sm"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-white">Add funds</h3>
-                <button
-                  onClick={() => setShowTopUpModal(false)}
-                  className="p-1.5 rounded-full hover:bg-gray-700 text-gray-400"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <label className="block text-gray-400 text-sm mb-2">Amount (GHS)</label>
-              <div className="relative mb-4">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ghana-gold font-semibold">GHS</span>
-                <input
-                  type="number"
-                  value={topUpAmount}
-                  onChange={(e) => setTopUpAmount(e.target.value)}
-                  placeholder="0.00"
-                  step="0.01"
-                  min="0"
-                  className="w-full bg-deep-black border border-gray-700 rounded-xl pl-14 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ghana-gold"
-                />
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                disabled={!topUpAmount || parseFloat(topUpAmount) <= 0}
-                onClick={() => {
-                  const amt = parseFloat(topUpAmount)
-                  if (amt > 0) {
-                    onTopUp(amt)
-                    setTopUpAmount('')
-                    setShowTopUpModal(false)
-                  }
-                }}
-                className="w-full bg-ghana-gold text-deep-black font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Add funds
-              </motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* MoMo Optimizer Widget */}
       <motion.div

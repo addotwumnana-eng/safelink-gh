@@ -6,7 +6,7 @@ import ELevyToggle from './ELevyToggle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
-function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate, showToast }) {
+function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate, showToast }) {
   const [formData, setFormData] = useState({
     itemName: '',
     price: '',
@@ -52,17 +52,6 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, includeELevyEsti
     
     if (!formData.price || parseFloat(formData.price) <= 0) {
       newErrors.price = 'Valid price is required'
-    } else {
-      const base = parseFloat(formData.price)
-      const costs = calculateMoMoCosts({
-        amount: base,
-        serviceFeeRate: DEFAULT_SERVICE_FEE_RATE,
-        eLevyRate: DEFAULT_E_LEVY_RATE,
-        includeELevy,
-      })
-      if (costs.totalToLock > (availableBalance ?? Infinity)) {
-        newErrors.price = 'Insufficient balance'
-      }
     }
     
     if (!formData.sellerMoMo.trim()) {
