@@ -5,6 +5,7 @@ import MoMoOptimizer from './MoMoOptimizer'
 import ELevyToggle from './ELevyToggle'
 
 function Dashboard({ trustScore, holdingBalance, deals, loadingDeals, includeELevyEstimate, onToggleELevyEstimate, onConfirmReceipt, onCancelDeal, onDispute, onResolveDisputeRefund, onResolveDisputeRelease, onViewSafeLink, onNewDeal }) {
+  const [showAllDeals, setShowAllDeals] = useState(false)
   const getTrustScoreColor = (score) => {
     if (score >= 80) return 'text-ghana-gold'
     if (score >= 60) return 'text-yellow-400'
@@ -118,9 +119,20 @@ function Dashboard({ trustScore, holdingBalance, deals, loadingDeals, includeELe
         transition={{ delay: 0.45 }}
         className="mx-6 mt-6"
       >
-        <div className="flex items-center gap-2 mb-3">
-          <FileText className="w-5 h-5 text-ghana-gold" />
-          <h3 className="text-lg font-semibold text-white">My Deals</h3>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-ghana-gold" />
+            <h3 className="text-lg font-semibold text-white">My Deals</h3>
+          </div>
+          {!loadingDeals && deals.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowAllDeals((v) => !v)}
+              className="text-xs font-medium text-ghana-gold hover:underline"
+            >
+              {showAllDeals ? 'Show last 5' : 'View all'}
+            </button>
+          )}
         </div>
         {loadingDeals ? (
           <p className="text-gray-500 text-sm py-4 text-center bg-charcoal/30 rounded-xl border border-gray-800/50">
@@ -134,6 +146,7 @@ function Dashboard({ trustScore, holdingBalance, deals, loadingDeals, includeELe
           <div className="space-y-3">
             {[...deals]
               .sort((a, b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0))
+              .slice(0, showAllDeals ? undefined : 5)
               .map((deal) => (
                 <div
                   key={deal.id}
@@ -255,6 +268,11 @@ function Dashboard({ trustScore, holdingBalance, deals, loadingDeals, includeELe
                   </div>
                 </div>
               ))}
+            {!showAllDeals && deals.length > 5 && (
+              <p className="text-[11px] text-gray-500 text-center pt-1">
+                Showing the last 5 deals (of {deals.length})
+              </p>
+            )}
           </div>
         )}
       </motion.div>
