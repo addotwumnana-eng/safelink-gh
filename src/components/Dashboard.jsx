@@ -119,27 +119,6 @@ function Dashboard({ trustScore, availableBalance, holdingBalance, deals, loadin
         </motion.div>
       </div>
 
-      {/* Paystack – Available balance & Top up */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-        className="mx-6 mt-6 rounded-2xl p-5 border border-ghana-gold/30 bg-ghana-gold/5"
-      >
-        <h3 className="text-gray-300 text-sm font-medium mb-2">Paystack</h3>
-        <p className="text-2xl font-bold text-white mb-1">GHS {availableBalance.toFixed(2)}</p>
-        <p className="text-xs text-gray-500 mb-3">Available balance</p>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowTopUpModal(true)}
-          className="w-full py-2.5 rounded-xl bg-ghana-gold text-white text-sm font-medium flex items-center justify-center gap-1.5"
-        >
-          <Plus className="w-4 h-4" />
-          Top up
-        </motion.button>
-      </motion.div>
-
       {/* Top up Modal */}
       <AnimatePresence>
         {showTopUpModal && (
