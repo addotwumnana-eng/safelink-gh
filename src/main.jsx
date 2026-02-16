@@ -13,6 +13,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<App />} />
         <Route path="/v/:linkId" element={<VerifyPage />} />
         <Route path="/payment/callback" element={<PaymentCallback />} />
+        {/* Alias for Paystack callback paths */}
+        <Route path="/callback" element={<PaymentCallback />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
