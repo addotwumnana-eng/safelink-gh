@@ -41,25 +41,39 @@ router.post('/create', async (req, res) => {
 
     await createDeal(deal)
 
-    const paystackResp = await initializePayment({
-      email: buyerEmail,
-      amount: totalToPay,
-      reference,
-      metadata: {
-        dealId: id,
-        itemName,
-        sellerMoMo,
-      },
-    })
+    let authorizationUrl = null
+    let paymentDisabled = false
+    let paymentError = null
 
-    const authorizationUrl = paystackResp?.data?.authorization_url
-    if (!authorizationUrl) {
-      return res.status(500).json({ error: 'Failed to get Paystack authorization url' })
+    try {
+      const paystackResp = await initializePayment({
+        email: buyerEmail,
+        amount: totalToPay,
+        reference,
+        metadata: {
+          dealId: id,
+          itemName,
+          sellerMoMo,
+        },
+      })
+
+      authorizationUrl = paystackResp?.data?.authorization_url || null
+      if (!authorizationUrl) {
+        paymentDisabled = true
+        paymentError = 'Paystack authorization url not returned'
+      }
+    } catch (err) {
+      // Allow SafeLink generation even if Paystack isn't configured.
+      paymentDisabled = true
+      paymentError = err?.message || 'Paystack initialization failed'
+      console.warn('Paystack init failed, returning deal without authorizationUrl:', paymentError)
     }
 
     res.json({
       deal,
       authorizationUrl,
+      paymentDisabled,
+      paymentError,
     })
   } catch (err) {
     console.error('Error creating deal:', err)

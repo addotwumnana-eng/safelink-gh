@@ -3,12 +3,28 @@ import Paystack from 'paystack'
 
 dotenv.config()
 
-const secretKey = process.env.PAYSTACK_SECRET_KEY
-if (!secretKey) {
-  console.warn('PAYSTACK_SECRET_KEY is not set')
-}
+let paystackClient = null
+let paystackInitError = null
 
-const paystack = Paystack(secretKey)
+function getPaystackClient() {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY
+  if (!secretKey) {
+    throw new Error('Paystack is not configured (missing PAYSTACK_SECRET_KEY)')
+  }
+
+  if (paystackClient) return paystackClient
+  if (paystackInitError) {
+    throw new Error(`Paystack init failed: ${paystackInitError}`)
+  }
+
+  try {
+    paystackClient = Paystack(secretKey)
+    return paystackClient
+  } catch (err) {
+    paystackInitError = err?.message || String(err)
+    throw new Error(`Paystack init failed: ${paystackInitError}`)
+  }
+}
 
 /**
  * amount is in GHS, we convert to pesewas (x100)
@@ -16,6 +32,7 @@ const paystack = Paystack(secretKey)
  * (e.g. https://safelink-ghana.vercel.app) so Paystack redirects there and the app return flow works.
  */
 export async function initializePayment({ email, amount, reference, metadata = {} }) {
+  const paystack = getPaystackClient()
   const koboAmount = Math.round(amount * 100)
 
   const response = await paystack.transaction.initialize({
@@ -31,6 +48,7 @@ export async function initializePayment({ email, amount, reference, metadata = {
 }
 
 export async function verifyPayment(reference) {
+  const paystack = getPaystackClient()
   const response = await paystack.transaction.verify(reference)
   return response
 }

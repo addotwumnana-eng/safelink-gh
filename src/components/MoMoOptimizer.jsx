@@ -1,41 +1,33 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Calculator, TrendingUp } from 'lucide-react'
+import {
+  DEFAULT_E_LEVY_RATE,
+  DEFAULT_SERVICE_FEE_RATE,
+  calculateMoMoCosts,
+} from '../utils/fees'
+import ELevyToggle from './ELevyToggle'
 
-function MoMoOptimizer() {
+function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
   const [amount, setAmount] = useState('')
   const [showDetails, setShowDetails] = useState(false)
+  const [localIncludeELevy, setLocalIncludeELevy] = useState(true)
+  const includeELevy = typeof includeELevyEstimate === 'boolean' ? includeELevyEstimate : localIncludeELevy
 
-  const SERVICE_FEE_RATE = 0.01 // 1% service fee
+  const costs = calculateMoMoCosts({
+    amount: parseFloat(amount || '0'),
+    serviceFeeRate: DEFAULT_SERVICE_FEE_RATE,
+    eLevyRate: DEFAULT_E_LEVY_RATE,
+    includeELevy,
+  })
 
-  const calculateFees = (transactionAmount) => {
-    const amountNum = parseFloat(transactionAmount) || 0
-    
-    if (amountNum === 0) {
-      return {
-        serviceFee: 0,
-        totalFees: 0,
-        netAmount: 0,
-        totalAmount: 0
-      }
-    }
-
-    // Service fee: 1% of transaction amount
-    const serviceFee = amountNum * SERVICE_FEE_RATE
-
-    const totalFees = serviceFee
-    const netAmount = amountNum - totalFees
-    const totalAmount = amountNum
-
-    return {
-      serviceFee,
-      totalFees,
-      netAmount,
-      totalAmount
+  const setInclude = (next) => {
+    if (typeof includeELevyEstimate === 'boolean') {
+      onToggleELevyEstimate?.(next)
+    } else {
+      setLocalIncludeELevy(next)
     }
   }
-
-  const fees = calculateFees(amount)
 
   return (
     <motion.div
@@ -79,23 +71,33 @@ function MoMoOptimizer() {
         >
           <div className="bg-deep-black rounded-xl p-4 border border-gray-800">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-400 text-sm">Total Amount:</span>
-              <span className="text-white font-bold">GHS {fees.totalAmount.toFixed(2)}</span>
+              <span className="text-gray-400 text-sm">Amount:</span>
+              <span className="text-white font-bold">GHS {costs.base.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-400 text-sm">Service Fee:</span>
-              <span className="text-orange-400 font-medium">
-                -GHS {fees.serviceFee.toFixed(2)}
-              </span>
+              <span className="text-gray-400 text-sm">Service fee (1%):</span>
+              <span className="text-orange-400 font-medium">+GHS {costs.serviceFee.toFixed(2)}</span>
             </div>
+            {includeELevy && (
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-400 text-sm">E‑Levy ({Math.round(DEFAULT_E_LEVY_RATE * 100)}%):</span>
+                <span className="text-orange-400 font-medium">+GHS {costs.eLevy.toFixed(2)}</span>
+              </div>
+            )}
             <div className="border-t border-gray-800 pt-2 mt-2">
               <div className="flex justify-between items-center">
-                <span className="text-gray-300 font-medium">Net Amount:</span>
-                <span className="text-ghana-gold font-bold text-lg">
-                  GHS {fees.netAmount.toFixed(2)}
-                </span>
+                <span className="text-gray-300 font-medium">Estimated total debit:</span>
+                <span className="text-ghana-gold font-bold text-lg">GHS {costs.estimatedTotalDebit.toFixed(2)}</span>
               </div>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 bg-charcoal/30 rounded-xl p-4 border border-gray-800/50">
+            <div>
+              <p className="text-sm text-gray-200 font-medium">E‑Levy estimate</p>
+              <p className="text-xs text-gray-500 mt-0.5">Toggle to add/remove the estimate</p>
+            </div>
+            <ELevyToggle checked={includeELevy} onChange={setInclude} />
           </div>
 
           <motion.button
@@ -114,7 +116,16 @@ function MoMoOptimizer() {
               className="bg-deep-black/50 rounded-xl p-4 border border-gray-800 text-xs text-gray-400 space-y-2"
             >
               <p>
-                <strong className="text-gray-300">Service Fee:</strong> 1% of transaction amount.
+                <strong className="text-gray-300">Service fee:</strong> 1% of the deal amount.
+              </p>
+              {includeELevy && (
+                <p>
+                  <strong className="text-gray-300">E‑Levy:</strong> Modeled at {Math.round(DEFAULT_E_LEVY_RATE * 100)}% of the deal amount.
+                  Actual levy can vary by channel/provider and exemptions.
+                </p>
+              )}
+              <p>
+                <strong className="text-gray-300">Total to lock:</strong> GHS {costs.totalToLock.toFixed(2)} (amount + service fee).
               </p>
             </motion.div>
           )}

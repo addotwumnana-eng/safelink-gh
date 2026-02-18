@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Shield, Lock } from 'lucide-react'
-import { Browser } from '@capacitor/browser'
-import { Capacitor } from '@capacitor/core'
+import { DEFAULT_E_LEVY_RATE, DEFAULT_SERVICE_FEE_RATE, calculateMoMoCosts } from '../utils/fees'
+import ELevyToggle from './ELevyToggle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
-function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn }) {
+function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate, showToast }) {
   const [formData, setFormData] = useState({
     itemName: '',
     price: '',
@@ -15,7 +15,18 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
   })
 
   const [errors, setErrors] = useState({})
+  const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [localIncludeELevy, setLocalIncludeELevy] = useState(true)
+  const includeELevy = typeof includeELevyEstimate === 'boolean' ? includeELevyEstimate : localIncludeELevy
+
+  const setInclude = (next) => {
+    if (typeof includeELevyEstimate === 'boolean') {
+      onToggleELevyEstimate?.(next)
+    } else {
+      setLocalIncludeELevy(next)
+    }
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -32,8 +43,6 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
     }
   }
 
-  const SERVICE_FEE_RATE = 0.01 // 1% service fee (SafeLink)
-
   const validateForm = () => {
     const newErrors = {}
     
@@ -43,11 +52,6 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
     
     if (!formData.price || parseFloat(formData.price) <= 0) {
       newErrors.price = 'Valid price is required'
-    } else {
-      const totalToPay = parseFloat(formData.price) * (1 + SERVICE_FEE_RATE)
-      if (totalToPay > (availableBalance ?? Infinity)) {
-        newErrors.price = 'Insufficient balance'
-      }
     }
     
     if (!formData.sellerMoMo.trim()) {
@@ -66,35 +70,17 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
     return Object.keys(newErrors).length === 0
   }
 
-  const generateSafeLink = () => {
-    const timestamp = Date.now()
-    const randomId = Math.random().toString(36).substring(2, 9)
-    return `safelink.gh/${timestamp}-${randomId}`
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
 
     if (!validateForm()) return
 
     setLoading(true)
+    setSubmitError('')
     try {
       const price = parseFloat(formData.price)
-      const serviceFee = price * SERVICE_FEE_RATE
-      const totalToPay = price + serviceFee
-      const safeLink = generateSafeLink()
 
-      // Update local UI / balances
-      onDealCreated({
-        ...formData,
-        price,
-        serviceFee,
-        totalToPay,
-        safeLink,
-        timestamp: new Date().toISOString()
-      })
-
-      // Call backend to initialize Paystack payment
+      // Call backend to create deal + initialize Paystack payment.
       const response = await fetch(`${API_BASE}/api/deals/create`, {
         method: 'POST',
         headers: {
@@ -109,30 +95,44 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
       })
 
       if (!response.ok) {
-        console.error('Failed to create deal on backend', await response.text())
+        const text = await response.text()
+        console.error('Failed to create deal on backend', text)
+        setSubmitError('Could not create deal. Check that the backend is running and reachable.')
+        showToast?.('Failed to create deal (backend error)')
         return
       }
 
       const data = await response.json()
-      if (data.authorizationUrl) {
-        if (Capacitor.isNativePlatform()) {
-          await Browser.open({ url: data.authorizationUrl })
-          const listener = await Browser.addListener('browserFinished', () => {
-            listener.remove()
-            onPaymentReturn?.()
-          })
-        } else {
-          window.location.href = data.authorizationUrl
-        }
-      } else {
-        console.error('No authorizationUrl returned from backend', data)
+      const deal = data?.deal
+      const authorizationUrl = data?.authorizationUrl
+
+      if (!deal) {
+        console.error('Missing deal from backend', data)
+        setSubmitError('Could not create deal (invalid backend response).')
+        showToast?.('Failed to create deal')
+        return
       }
+
+      // Hand off to app state: show SafeLink screen, let user copy/link-share,
+      // then proceed to payment from there.
+      onDealCreated?.({ deal, authorizationUrl, includeELevy })
     } catch (err) {
       console.error('Error creating deal / initializing Paystack', err)
+      setSubmitError(
+        `Network/CORS error. Confirm backend is reachable at ${API_BASE} and that CORS allows your frontend URL.`
+      )
+      showToast?.('Network error talking to backend')
     } finally {
       setLoading(false)
     }
   }
+
+  const previewCosts = calculateMoMoCosts({
+    amount: parseFloat(formData.price || '0'),
+    serviceFeeRate: DEFAULT_SERVICE_FEE_RATE,
+    eLevyRate: DEFAULT_E_LEVY_RATE,
+    includeELevy,
+  })
 
   return (
     <div className="min-h-screen bg-deep-black text-white">
@@ -205,6 +205,29 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
             </div>
             {errors.price && (
               <p className="text-red-400 text-xs mt-1">{errors.price}</p>
+            )}
+
+            {parseFloat(formData.price || '0') > 0 && (
+              <div className="mt-3 bg-deep-black/40 rounded-xl p-4 border border-gray-800 space-y-2">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>SafeLink service fee (1%)</span>
+                  <span className="text-orange-400">+GHS {previewCosts.serviceFee.toFixed(2)}</span>
+                </div>
+                {includeELevy && (
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>E‑Levy ({Math.round(DEFAULT_E_LEVY_RATE * 100)}%)</span>
+                    <span className="text-orange-400">+GHS {previewCosts.eLevy.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="border-t border-gray-800 pt-2 flex justify-between items-center">
+                  <span className="text-xs text-gray-300">Estimated total debit</span>
+                  <span className="text-ghana-gold font-semibold">GHS {previewCosts.estimatedTotalDebit.toFixed(2)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">E‑Levy estimate</span>
+                  <ELevyToggle checked={includeELevy} onChange={setInclude} size="sm" />
+                </div>
+              </div>
             )}
           </div>
 
@@ -279,8 +302,12 @@ function NewDealForm({ availableBalance, onDealCreated, onBack, onPaymentReturn 
             }`}
           >
             <Lock className="w-5 h-5" />
-            <span>{loading ? 'Connecting to Paystack…' : 'Generate SafeLink'}</span>
+            <span>{loading ? 'Creating SafeLink…' : 'Generate SafeLink'}</span>
           </motion.button>
+
+          {submitError && (
+            <p className="text-red-400 text-xs mt-3 text-center">{submitError}</p>
+          )}
         </motion.div>
       </form>
     </div>

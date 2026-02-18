@@ -41,6 +41,24 @@ function VerifyPage() {
     fetchDeal()
   }, [linkId])
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-deep-black text-white px-6 py-12">
+        <div className="mobile-container">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-charcoal/40 rounded-2xl p-6 border border-gray-800/50 text-center"
+          >
+            <Shield className="w-10 h-10 text-ghana-gold mx-auto mb-3" />
+            <p className="text-sm text-gray-300 font-medium">Verifying SafeLink…</p>
+            <p className="text-xs text-gray-500 mt-1">Checking escrow status</p>
+          </motion.div>
+        </div>
+      </div>
+    )
+  }
+
   if (!deal) {
     return (
       <div className="min-h-screen bg-deep-black text-white flex flex-col items-center justify-center px-6">
@@ -67,6 +85,14 @@ function VerifyPage() {
   const status = deal.status
 
   const getStatusContent = () => {
+    if (status === 'pending_payment') {
+      return {
+        icon: Lock,
+        iconClass: 'text-slate-300',
+        title: 'Payment pending',
+        message: 'The deal is created, but funds are not locked yet. Complete payment to activate escrow.',
+      }
+    }
     if (status === 'completed') {
       return {
         icon: CheckCircle,
@@ -91,7 +117,7 @@ function VerifyPage() {
         message: 'This deal is under dispute. Funds are held in escrow until resolved.',
       }
     }
-    // active
+    // paid/active
     return {
       icon: Shield,
       iconClass: 'text-ghana-gold',
@@ -107,7 +133,7 @@ function VerifyPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-sm mx-auto"
+        className="mobile-container max-w-sm"
       >
         <div className="flex items-center gap-2 mb-8">
           <Shield className="w-8 h-8 text-ghana-gold" />
@@ -129,12 +155,12 @@ function VerifyPage() {
               <span className="text-white font-medium">{deal.itemName}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Amount secured</span>
-              <span className="text-ghana-gold font-bold">GHS {amount.toFixed(2)}</span>
+              <span className="text-gray-400">{status === 'pending_payment' ? 'Amount (to be locked)' : 'Amount secured'}</span>
+              <span className="text-ghana-gold font-bold">GHS {Number(amount).toFixed(2)}</span>
             </div>
           </div>
 
-          {(status === 'paid' || status === 'active' || status === 'disputed' || status === 'pending_payment') && (
+          {(status === 'paid' || status === 'active' || status === 'disputed') && (
             <div className="mt-4 flex items-start gap-2 text-xs text-gray-500">
               <Lock className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>You can safely ship. Funds are held by SafeLink until the buyer confirms receipt.</span>

@@ -11,10 +11,11 @@ function PaymentCallback() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const reference = params.get('reference')
+    // Paystack may return `reference` or `trxref` depending on integration.
+    const reference = params.get('reference') || params.get('trxref')
 
     if (!reference) {
-      setMessage('Missing payment reference.')
+      setMessage('Missing payment reference (reference/trxref).')
       return
     }
 
@@ -56,9 +57,9 @@ function PaymentCallback() {
 
   return (
     <div className="min-h-screen bg-deep-black text-white flex items-center justify-center px-6">
-      <p className="text-sm text-ghana-gold text-center">
-        {message}
-      </p>
+      <div className="mobile-container">
+        <p className="text-sm text-ghana-gold text-center">{message}</p>
+      </div>
     </div>
   )
 }

@@ -11,19 +11,14 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard')
   const [deals, setDeals] = useState([])
   const [loadingDeals, setLoadingDeals] = useState(true)
-  const [availableBalance, setAvailableBalance] = useState(() => {
-    const v = parseFloat(localStorage.getItem('safelink_available_balance'))
-    return Number.isFinite(v) ? v : 1250.5
-  })
-  const [holdingBalance, setHoldingBalance] = useState(() => {
-    const v = parseFloat(localStorage.getItem('safelink_holding_balance'))
-    return Number.isFinite(v) ? v : 0
-  })
   const [generatedLink, setGeneratedLink] = useState(null)
+  const [authorizationUrl, setAuthorizationUrl] = useState(null)
   const [toastMessage, setToastMessage] = useState(null)
-
-  // Backend test state
-  const [backendMessage, setBackendMessage] = useState('Connecting to backend...')
+  const [includeELevyEstimate, setIncludeELevyEstimate] = useState(() => {
+    const raw = localStorage.getItem('safelink_include_e_levy_estimate')
+    if (raw === null) return true
+    return raw === 'true'
+  })
 
   // Load deals from backend on mount
   useEffect(() => {
@@ -46,19 +41,9 @@ function App() {
     loadDeals()
   }, [])
 
-  // Call backend test endpoint once on mount
   useEffect(() => {
-    fetch(`${API_BASE}/api/test`)
-      .then((res) => res.json())
-      .then((data) => {
-        console.log('Backend response:', data)
-        setBackendMessage(`Backend says: ${data.message || 'OK'}`)
-      })
-      .catch((err) => {
-        console.error('Error talking to backend:', err)
-        setBackendMessage('Failed to reach backend')
-      })
-  }, [])
+    localStorage.setItem('safelink_include_e_levy_estimate', String(includeELevyEstimate))
+  }, [includeELevyEstimate])
 
   const showToast = (msg) => setToastMessage(msg)
 
@@ -68,31 +53,29 @@ function App() {
     return Math.min(100, Math.max(0, 50 + completed * 5 - cancelled * 10))
   }, [deals])
 
-  // Calculate holding balance from backend deals
-  useEffect(() => {
-    const paidDeals = deals.filter((d) => d.status === 'paid' || d.status === 'pending_payment')
-    const totalHolding = paidDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
-    setHoldingBalance(totalHolding)
+  const holdingBalance = useMemo(() => {
+    const holdingDeals = deals.filter(
+      (d) => d.status === 'paid' || d.status === 'active' || d.status === 'disputed'
+    )
+    return holdingDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
   }, [deals])
-
-  useEffect(() => {
-    localStorage.setItem('safelink_available_balance', String(availableBalance))
-    localStorage.setItem('safelink_holding_balance', String(holdingBalance))
-  }, [availableBalance, holdingBalance])
 
   const handleNewDeal = () => {
     setCurrentView('newDeal')
   }
 
-  const handleDealCreated = (linkData) => {
-    setGeneratedLink(linkData)
-    showToast('Deal created! Redirecting to Paystack...')
+  const handleDealCreated = ({ deal, authorizationUrl: authUrl }) => {
+    setGeneratedLink(deal)
+    setAuthorizationUrl(authUrl || null)
+    setCurrentView('safeLink')
+    showToast('SafeLink generated. Share it, then complete payment to lock funds.')
   }
 
   const handlePaymentReturn = () => {
     refreshDeals().then(() => {
       setCurrentView('dashboard')
       setGeneratedLink(null)
+      setAuthorizationUrl(null)
       showToast('Payment complete! Check My Deals.')
     })
   }
@@ -169,9 +152,6 @@ function App() {
   const handleResolveDisputeRefund = (dealId) => {
     const deal = deals.find((d) => d.id === dealId)
     if (!deal || deal.status !== 'disputed') return
-    const amount = deal.totalToPay ?? deal.price
-    setHoldingBalance((h) => h - amount)
-    setAvailableBalance((a) => a + amount)
     setDeals((d) =>
       d.map((x) => (x.id === dealId ? { ...x, status: 'cancelled' } : x))
     )
@@ -181,27 +161,22 @@ function App() {
   const handleResolveDisputeRelease = (dealId) => {
     const deal = deals.find((d) => d.id === dealId)
     if (!deal || deal.status !== 'disputed') return
-    const amount = deal.totalToPay ?? deal.price
-    setHoldingBalance((h) => h - amount)
     setDeals((d) =>
       d.map((x) => (x.id === dealId ? { ...x, status: 'completed' } : x))
     )
     showToast('Dispute resolved. Funds released to seller.')
   }
 
-  const handleTopUp = (amount) => {
-    setAvailableBalance((a) => a + amount)
-    showToast('Funds added')
-  }
-
   const handleViewSafeLink = (deal) => {
     setGeneratedLink(deal)
+    setAuthorizationUrl(null)
     setCurrentView('safeLink')
   }
 
   const handleBackToDashboard = () => {
     setCurrentView('dashboard')
     setGeneratedLink(null)
+    setAuthorizationUrl(null)
   }
 
   return (
@@ -217,16 +192,16 @@ function App() {
           >
             <Dashboard
               trustScore={trustScore}
-              availableBalance={availableBalance}
               holdingBalance={holdingBalance}
               deals={deals}
               loadingDeals={loadingDeals}
+              includeELevyEstimate={includeELevyEstimate}
+              onToggleELevyEstimate={setIncludeELevyEstimate}
               onConfirmReceipt={handleConfirmReceipt}
               onCancelDeal={handleCancelDeal}
               onDispute={handleDispute}
               onResolveDisputeRefund={handleResolveDisputeRefund}
               onResolveDisputeRelease={handleResolveDisputeRelease}
-              onTopUp={handleTopUp}
               onViewSafeLink={handleViewSafeLink}
               onNewDeal={handleNewDeal}
             />
@@ -242,10 +217,11 @@ function App() {
             transition={{ duration: 0.3 }}
           >
             <NewDealForm
-              availableBalance={availableBalance}
               onDealCreated={handleDealCreated}
               onBack={handleBackToDashboard}
-              onPaymentReturn={handlePaymentReturn}
+              includeELevyEstimate={includeELevyEstimate}
+              onToggleELevyEstimate={setIncludeELevyEstimate}
+              showToast={showToast}
             />
           </motion.div>
         )}
@@ -260,17 +236,16 @@ function App() {
           >
             <SafeLinkDisplay
               linkData={generatedLink}
+              authorizationUrl={authorizationUrl}
               onBack={handleBackToDashboard}
               showToast={showToast}
+              onPaymentReturn={handlePaymentReturn}
+              includeELevyEstimate={includeELevyEstimate}
+              onToggleELevyEstimate={setIncludeELevyEstimate}
             />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Show backend status at the bottom */}
-      <p className="text-xs text-emerald-400 mt-2 text-center">
-        {backendMessage}
-      </p>
 
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
     </div>
