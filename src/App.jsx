@@ -4,8 +4,9 @@ import Dashboard from './components/Dashboard'
 import NewDealForm from './components/NewDealForm'
 import SafeLinkDisplay from './components/SafeLinkDisplay'
 import Toast from './components/Toast'
+import { getApiBaseUrl } from './utils/apiBase'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+const API_BASE = getApiBaseUrl()
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard')

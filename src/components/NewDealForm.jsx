@@ -3,8 +3,9 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Shield, Lock } from 'lucide-react'
 import { DEFAULT_E_LEVY_RATE, DEFAULT_SERVICE_FEE_RATE, calculateMoMoCosts } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
+import { getApiBaseUrl } from '../utils/apiBase'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+const API_BASE = getApiBaseUrl()
 
 function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate, showToast }) {
   const [formData, setFormData] = useState({
