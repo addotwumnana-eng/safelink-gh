@@ -106,6 +106,7 @@ function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELev
       const data = await response.json()
       const deal = data?.deal
       const authorizationUrl = data?.authorizationUrl
+      const paymentError = data?.paymentError || null
 
       if (!deal) {
         console.error('Missing deal from backend', data)
@@ -116,7 +117,7 @@ function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELev
 
       // Hand off to app state: show SafeLink screen, let user copy/link-share,
       // then proceed to payment from there.
-      onDealCreated?.({ deal, authorizationUrl, includeELevy })
+      onDealCreated?.({ deal, authorizationUrl, includeELevy, paymentError })
     } catch (err) {
       console.error('Error creating deal / initializing Paystack', err)
       setSubmitError(
