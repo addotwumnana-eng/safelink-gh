@@ -29,12 +29,17 @@ A modern, mobile-first React web application for trust-based escrow and payment 
 npm install
 ```
 
-2. Start the development server:
+2. Create a local env file (do not commit it):
+```bash
+cp .env.example .env
+```
+
+3. Start the development server:
 ```bash
 npm run dev
 ```
 
-3. Open your browser and navigate to the local development URL (usually `http://localhost:5173`)
+4. Open your browser and navigate to the local development URL (usually `http://localhost:5173`)
 
 ## Project Structure
 
@@ -72,13 +77,31 @@ To preview the production build:
 npm run preview
 ```
 
+## Android Studio (Capacitor)
+
+After changing frontend env/config (like `VITE_API_BASE_URL`), re-sync Android:
+
+```bash
+npm install
+cp .env.example .env
+# edit .env (set VITE_API_BASE_URL)
+npm run android:sync
+```
+
+Then open **the `android/` folder** in Android Studio.
+
+If Android Studio says it can’t find the Android SDK:
+- Android Studio → **Settings** → **Android SDK** (install it)
+- or set `ANDROID_HOME`
+- or let Android Studio generate `android/local.properties` (do not commit it)
+
 ## Production & Paystack callback (Android app)
 
 For the **mobile app**, Paystack redirects the user to your frontend after payment. That URL must be your **deployed** site so the in-app browser can load it and then close, returning the user to the app.
 
 1. **Deploy the frontend** (e.g. Vercel, Netlify) and note the URL (e.g. `https://safelink-ghana.vercel.app`).
 
-2. **Set backend `FRONTEND_URL`** to that URL in `backend/.env`:
+2. **Set backend `FRONTEND_URL`** to that URL in your backend environment (e.g. Railway variables) or a local `backend/.env` file (do **not** commit it):
    ```env
    FRONTEND_URL=https://your-deployed-app.vercel.app
    ```
