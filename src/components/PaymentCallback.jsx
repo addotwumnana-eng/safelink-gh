@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
+import { getApiBaseUrl } from '../utils/apiBase'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+const API_BASE = getApiBaseUrl()
 
 function PaymentCallback() {
   const [message, setMessage] = useState('Verifying your payment…')

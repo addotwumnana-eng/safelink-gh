@@ -4,8 +4,9 @@ import Dashboard from './components/Dashboard'
 import NewDealForm from './components/NewDealForm'
 import SafeLinkDisplay from './components/SafeLinkDisplay'
 import Toast from './components/Toast'
+import { getApiBaseUrl } from './utils/apiBase'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+const API_BASE = getApiBaseUrl()
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard')
@@ -13,6 +14,7 @@ function App() {
   const [loadingDeals, setLoadingDeals] = useState(true)
   const [generatedLink, setGeneratedLink] = useState(null)
   const [authorizationUrl, setAuthorizationUrl] = useState(null)
+  const [paymentError, setPaymentError] = useState(null)
   const [toastMessage, setToastMessage] = useState(null)
   const [includeELevyEstimate, setIncludeELevyEstimate] = useState(() => {
     const raw = localStorage.getItem('safelink_include_e_levy_estimate')
@@ -64,9 +66,10 @@ function App() {
     setCurrentView('newDeal')
   }
 
-  const handleDealCreated = ({ deal, authorizationUrl: authUrl }) => {
+  const handleDealCreated = ({ deal, authorizationUrl: authUrl, paymentError: payErr }) => {
     setGeneratedLink(deal)
     setAuthorizationUrl(authUrl || null)
+    setPaymentError(payErr || null)
     setCurrentView('safeLink')
     showToast('SafeLink generated. Share it, then complete payment to lock funds.')
   }
@@ -76,6 +79,7 @@ function App() {
       setCurrentView('dashboard')
       setGeneratedLink(null)
       setAuthorizationUrl(null)
+      setPaymentError(null)
       showToast('Payment complete! Check My Deals.')
     })
   }
@@ -170,6 +174,7 @@ function App() {
   const handleViewSafeLink = (deal) => {
     setGeneratedLink(deal)
     setAuthorizationUrl(null)
+    setPaymentError(null)
     setCurrentView('safeLink')
   }
 
@@ -177,6 +182,7 @@ function App() {
     setCurrentView('dashboard')
     setGeneratedLink(null)
     setAuthorizationUrl(null)
+    setPaymentError(null)
   }
 
   return (
@@ -237,6 +243,7 @@ function App() {
             <SafeLinkDisplay
               linkData={generatedLink}
               authorizationUrl={authorizationUrl}
+              paymentError={paymentError}
               onBack={handleBackToDashboard}
               showToast={showToast}
               onPaymentReturn={handlePaymentReturn}

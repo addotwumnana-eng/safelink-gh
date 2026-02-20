@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core'
 import { DEFAULT_E_LEVY_RATE, calculateMoMoCosts } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
 
-function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaymentReturn, includeELevyEstimate, onToggleELevyEstimate }) {
+function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, showToast, onPaymentReturn, includeELevyEstimate, onToggleELevyEstimate }) {
   const [copied, setCopied] = useState(false)
 
   const verifyUrl = `${window.location.origin}/v/${linkData.id}`
@@ -151,10 +151,15 @@ function SafeLinkDisplay({ linkData, authorizationUrl, onBack, showToast, onPaym
               </motion.button>
             ) : (
               <div className="mt-4 rounded-xl border border-slate-700/60 bg-black/20 p-4">
-                <p className="text-xs text-slate-300 font-medium">Payments not configured</p>
+                <p className="text-xs text-slate-300 font-medium">Payments unavailable</p>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  SafeLink was generated, but Paystack is not configured on the backend yet.
-                  Add `PAYSTACK_SECRET_KEY` to `backend/.env` to enable payments.
+                  {paymentError
+                    ? `Paystack init failed: ${paymentError}`
+                    : 'Paystack authorization URL was not returned by the backend.'}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-2">
+                  On Railway, confirm `PAYSTACK_SECRET_KEY` is set (starts with <span className="font-mono">sk_</span>)
+                  and redeploy the backend.
                 </p>
               </div>
             )}

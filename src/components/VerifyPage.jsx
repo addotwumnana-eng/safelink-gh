@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Shield, CheckCircle, XCircle, AlertTriangle, Lock } from 'lucide-react'
+import { getApiBaseUrl } from '../utils/apiBase'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+const API_BASE = getApiBaseUrl()
 
 function VerifyPage() {
   const { linkId } = useParams()
