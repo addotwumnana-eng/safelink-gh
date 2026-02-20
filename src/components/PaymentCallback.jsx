@@ -38,6 +38,15 @@ function PaymentCallback() {
         console.log('Payment verified:', data)
         setMessage('Payment verified! Returning to app…')
 
+        try {
+          const paidDealId = data?.deal?.id
+          if (paidDealId) {
+            localStorage.setItem('safelink_last_paid_deal_id', paidDealId)
+          }
+        } catch {
+          // ignore storage failures
+        }
+
         const isApp = Capacitor.isNativePlatform()
         if (isApp) {
           // Close in-app browser so user returns to the app; listener there will refresh and go to dashboard

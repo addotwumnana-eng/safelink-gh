@@ -4,10 +4,12 @@ import { ArrowLeft, Shield, Lock } from 'lucide-react'
 import { DEFAULT_E_LEVY_RATE, DEFAULT_SERVICE_FEE_RATE, calculateMoMoCosts } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
 import { getApiBaseUrl } from '../utils/apiBase'
+import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 
 const API_BASE = getApiBaseUrl()
 
-function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELevyEstimate, showToast }) {
+function NewDealForm({ onBack, includeELevyEstimate, onToggleELevyEstimate, showToast, onPaymentReturn }) {
   const [formData, setFormData] = useState({
     itemName: '',
     price: '',
@@ -115,9 +117,31 @@ function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELev
         return
       }
 
-      // Hand off to app state: show SafeLink screen, let user copy/link-share,
-      // then proceed to payment from there.
-      onDealCreated?.({ deal, authorizationUrl, includeELevy, paymentError })
+      if (!authorizationUrl) {
+        console.error('Missing authorizationUrl from backend', data)
+        setSubmitError(paymentError ? `Payment setup failed: ${paymentError}` : 'Payment setup failed.')
+        showToast?.('Payment setup failed')
+        return
+      }
+
+      // Store the deal id so we can reveal SafeLink only after payment is verified.
+      try {
+        localStorage.setItem('safelink_pending_deal_id', deal.id)
+      } catch {
+        // ignore storage failures
+      }
+
+      showToast?.('Redirecting to Paystack…')
+
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: authorizationUrl })
+        const listener = await Browser.addListener('browserFinished', () => {
+          listener.remove()
+          onPaymentReturn?.()
+        })
+      } else {
+        window.location.href = authorizationUrl
+      }
     } catch (err) {
       console.error('Error creating deal / initializing Paystack', err)
       setSubmitError(
@@ -304,7 +328,7 @@ function NewDealForm({ onDealCreated, onBack, includeELevyEstimate, onToggleELev
             }`}
           >
             <Lock className="w-5 h-5" />
-            <span>{loading ? 'Creating SafeLink…' : 'Generate SafeLink'}</span>
+            <span>{loading ? 'Redirecting to Paystack…' : 'Pay & Generate SafeLink'}</span>
           </motion.button>
 
           {submitError && (
