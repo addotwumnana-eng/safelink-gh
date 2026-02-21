@@ -174,19 +174,21 @@ function Dashboard({ trustScore, holdingBalance, deals, loadingDeals, includeELe
                     </span>
                   </div>
                   <div className="mt-2 space-y-2">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => onViewSafeLink(deal)}
-                      className="w-full py-2 rounded-lg bg-charcoal/80 text-ghana-gold text-sm font-medium border border-ghana-gold/40 flex items-center justify-center gap-2"
-                    >
-                      <Link2 className="w-4 h-4" />
-                      View SafeLink
-                    </motion.button>
+                    {deal.status !== 'pending_payment' && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => onViewSafeLink(deal)}
+                        className="w-full py-2 rounded-lg bg-charcoal/80 text-ghana-gold text-sm font-medium border border-ghana-gold/40 flex items-center justify-center gap-2"
+                      >
+                        <Link2 className="w-4 h-4" />
+                        View SafeLink
+                      </motion.button>
+                    )}
 
                     {deal.status === 'pending_payment' && (
                       <p className="text-xs text-gray-400">
-                        Complete payment to lock funds in escrow (SafeLink will update automatically after Paystack confirms).
+                        Payment not completed yet. SafeLink will be available after payment is verified.
                       </p>
                     )}
 

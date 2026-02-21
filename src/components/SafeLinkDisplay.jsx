@@ -137,7 +137,7 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
           <div className="bg-slate-900/40 border border-slate-700/50 rounded-2xl p-5">
             <p className="text-sm text-slate-200 font-semibold">Payment pending</p>
             <p className="text-xs text-slate-400 mt-1">
-              Share the SafeLink now, then complete payment to lock funds in escrow.
+              Complete payment to unlock your SafeLink. The link can be shared after payment is verified.
             </p>
             {authorizationUrl ? (
               <motion.button
@@ -213,41 +213,45 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
           </div>
         </motion.div>
 
-        {/* SafeLink Display */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-ghana-gold/10 border border-ghana-gold/30 rounded-2xl p-6"
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Shield className="w-5 h-5 text-ghana-gold" />
-            <h3 className="text-lg font-semibold text-ghana-gold">Your SafeLink</h3>
-          </div>
-          
-          <div className="bg-deep-black rounded-xl p-4 mb-4 border border-ghana-gold/20">
-            <p className="text-ghana-gold font-mono text-sm break-all">{displayLink}</p>
-          </div>
+        {linkData.status !== 'pending_payment' && (
+          <>
+            {/* SafeLink Display */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-ghana-gold/10 border border-ghana-gold/30 rounded-2xl p-6"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="w-5 h-5 text-ghana-gold" />
+                <h3 className="text-lg font-semibold text-ghana-gold">Your SafeLink</h3>
+              </div>
+              
+              <div className="bg-deep-black rounded-xl p-4 mb-4 border border-ghana-gold/20">
+                <p className="text-ghana-gold font-mono text-sm break-all">{displayLink}</p>
+              </div>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleCopy}
-            className="w-full bg-ghana-gold text-deep-black font-bold py-3 rounded-xl flex items-center justify-center gap-2"
-          >
-            {copied ? (
-              <>
-                <CheckCircle className="w-5 h-5" />
-                <span>Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-5 h-5" />
-                <span>Copy Link</span>
-              </>
-            )}
-          </motion.button>
-        </motion.div>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleCopy}
+                className="w-full bg-ghana-gold text-deep-black font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              >
+                {copied ? (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-5 h-5" />
+                    <span>Copy Link</span>
+                  </>
+                )}
+              </motion.button>
+            </motion.div>
+          </>
+        )}
 
         {/* Instructions */}
         <motion.div
@@ -270,32 +274,33 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
           </div>
         </motion.div>
 
-        {/* Share Options */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="flex gap-3"
-        >
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleShareWhatsApp}
-            className="flex-1 bg-charcoal/50 border border-gray-700 rounded-xl py-3 flex items-center justify-center gap-2 text-gray-300 hover:border-ghana-gold/50 transition-colors"
+        {linkData.status !== 'pending_payment' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="flex gap-3"
           >
-            <ExternalLink className="w-4 h-4" />
-            <span className="text-sm">Share via WhatsApp</span>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleShareSMS}
-            className="flex-1 bg-charcoal/50 border border-gray-700 rounded-xl py-3 flex items-center justify-center gap-2 text-gray-300 hover:border-ghana-gold/50 transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span className="text-sm">Share via SMS</span>
-          </motion.button>
-        </motion.div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleShareWhatsApp}
+              className="flex-1 bg-charcoal/50 border border-gray-700 rounded-xl py-3 flex items-center justify-center gap-2 text-gray-300 hover:border-ghana-gold/50 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="text-sm">Share via WhatsApp</span>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleShareSMS}
+              className="flex-1 bg-charcoal/50 border border-gray-700 rounded-xl py-3 flex items-center justify-center gap-2 text-gray-300 hover:border-ghana-gold/50 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="text-sm">Share via SMS</span>
+            </motion.button>
+          </motion.div>
+        )}
 
         {/* Back to Dashboard */}
         <motion.button

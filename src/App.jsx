@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Dashboard from './components/Dashboard'
 import NewDealForm from './components/NewDealForm'
@@ -7,6 +7,8 @@ import Toast from './components/Toast'
 import { getApiBaseUrl } from './utils/apiBase'
 
 const API_BASE = getApiBaseUrl()
+const PENDING_DEAL_KEY = 'safelink_pending_deal_id'
+const LAST_PAID_DEAL_KEY = 'safelink_last_paid_deal_id'
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard')
@@ -47,7 +49,7 @@ function App() {
     localStorage.setItem('safelink_include_e_levy_estimate', String(includeELevyEstimate))
   }, [includeELevyEstimate])
 
-  const showToast = (msg) => setToastMessage(msg)
+  const showToast = useCallback((msg) => setToastMessage(msg), [])
 
   const trustScore = useMemo(() => {
     const completed = deals.filter((d) => d.status === 'completed').length
@@ -62,26 +64,51 @@ function App() {
     return holdingDeals.reduce((sum, d) => sum + (d.totalToPay || d.price || 0), 0)
   }, [deals])
 
+  const maybeRevealSafeLinkAfterPayment = useCallback((nextDeals) => {
+    const getCandidateId = () => {
+      try {
+        return localStorage.getItem(LAST_PAID_DEAL_KEY) || localStorage.getItem(PENDING_DEAL_KEY)
+      } catch {
+        return null
+      }
+    }
+
+    const candidateId = getCandidateId()
+    if (!candidateId) return false
+
+    const deal = (nextDeals || []).find((d) => d.id === candidateId)
+    if (!deal) return false
+
+    if (deal.status === 'paid' || deal.status === 'active' || deal.status === 'disputed' || deal.status === 'completed') {
+      setGeneratedLink(deal)
+      setAuthorizationUrl(null)
+      setPaymentError(null)
+      setCurrentView('safeLink')
+      showToast('Payment verified. Copy your SafeLink and share with the seller.')
+      try {
+        localStorage.removeItem(PENDING_DEAL_KEY)
+        localStorage.removeItem(LAST_PAID_DEAL_KEY)
+      } catch {
+        // ignore
+      }
+      return true
+    }
+
+    return false
+  }, [showToast])
+
   const handleNewDeal = () => {
     setCurrentView('newDeal')
   }
 
-  const handleDealCreated = ({ deal, authorizationUrl: authUrl, paymentError: payErr }) => {
-    setGeneratedLink(deal)
-    setAuthorizationUrl(authUrl || null)
-    setPaymentError(payErr || null)
-    setCurrentView('safeLink')
-    showToast('SafeLink generated. Share it, then complete payment to lock funds.')
-  }
-
-  const handlePaymentReturn = () => {
-    refreshDeals().then(() => {
-      setCurrentView('dashboard')
-      setGeneratedLink(null)
-      setAuthorizationUrl(null)
-      setPaymentError(null)
-      showToast('Payment complete! Check My Deals.')
-    })
+  const handlePaymentReturn = async () => {
+    const nextDeals = await refreshDeals()
+    if (nextDeals && maybeRevealSafeLinkAfterPayment(nextDeals)) return
+    setCurrentView('dashboard')
+    setGeneratedLink(null)
+    setAuthorizationUrl(null)
+    setPaymentError(null)
+    showToast('Payment complete!')
   }
 
   // Refresh deals from backend
@@ -91,10 +118,12 @@ function App() {
       if (res.ok) {
         const data = await res.json()
         setDeals(data)
+        return data
       }
     } catch (err) {
       console.error('Error refreshing deals:', err)
     }
+    return null
   }
 
   const handleConfirmReceipt = async (dealId) => {
@@ -185,6 +214,12 @@ function App() {
     setPaymentError(null)
   }
 
+  // After a redirect back from Paystack (web), reveal SafeLink once the paid deal is visible.
+  useEffect(() => {
+    if (loadingDeals) return
+    maybeRevealSafeLinkAfterPayment(deals)
+  }, [loadingDeals, deals, maybeRevealSafeLinkAfterPayment])
+
   return (
     <div className="min-h-screen bg-deep-black mobile-container">
       <AnimatePresence mode="wait">
@@ -223,11 +258,11 @@ function App() {
             transition={{ duration: 0.3 }}
           >
             <NewDealForm
-              onDealCreated={handleDealCreated}
               onBack={handleBackToDashboard}
               includeELevyEstimate={includeELevyEstimate}
               onToggleELevyEstimate={setIncludeELevyEstimate}
               showToast={showToast}
+              onPaymentReturn={handlePaymentReturn}
             />
           </motion.div>
         )}
