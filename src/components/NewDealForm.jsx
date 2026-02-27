@@ -236,7 +236,7 @@ function NewDealForm({ onBack, includeELevyEstimate, onToggleELevyEstimate, show
             {parseFloat(formData.price || '0') > 0 && (
               <div className="mt-3 bg-deep-black/40 rounded-xl p-4 border border-gray-800 space-y-2">
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>SafeLink service fee (1%)</span>
+                  <span>Service fee (1%)</span>
                   <span className="text-orange-400">+GHS {previewCosts.serviceFee.toFixed(2)}</span>
                 </div>
                 {includeELevy && (
