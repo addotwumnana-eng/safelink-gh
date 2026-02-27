@@ -82,7 +82,7 @@ function VerifyPage() {
     )
   }
 
-  const amount = deal.totalToPay ?? deal.price
+  const amount = Number(deal.price ?? deal.totalToPay ?? 0)
   const status = deal.status
 
   const getStatusContent = () => {
@@ -156,15 +156,18 @@ function VerifyPage() {
               <span className="text-white font-medium">{deal.itemName}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">{status === 'pending_payment' ? 'Amount (to be locked)' : 'Amount secured'}</span>
-              <span className="text-ghana-gold font-bold">GHS {Number(amount).toFixed(2)}</span>
+              <span className="text-gray-400">Agreed amount</span>
+              <span className="text-ghana-gold font-bold">GHS {amount.toFixed(2)}</span>
             </div>
           </div>
 
           {(status === 'paid' || status === 'active' || status === 'disputed') && (
             <div className="mt-4 flex items-start gap-2 text-xs text-gray-500">
               <Lock className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>You can safely ship. Funds are held by SafeLink until the buyer confirms receipt.</span>
+              <span>
+                You can safely ship. Funds are held by SafeLink until the buyer confirms receipt.
+                <span className="block mt-1 text-gray-500">Always remind the customer to click confirm payment</span>
+              </span>
             </div>
           )}
         </div>

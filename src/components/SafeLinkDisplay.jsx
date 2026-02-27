@@ -9,7 +9,11 @@ import ELevyToggle from './ELevyToggle'
 function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, showToast, onPaymentReturn, includeELevyEstimate, onToggleELevyEstimate }) {
   const [copied, setCopied] = useState(false)
 
-  const verifyUrl = `${window.location.origin}/v/${linkData.id}`
+  const verifyUrlObj = new URL(`${window.location.origin}/v/${linkData.id}`)
+  // Attach item + agreed amount to the link for easy preview when shared.
+  verifyUrlObj.searchParams.set('item', linkData.itemName || '')
+  verifyUrlObj.searchParams.set('amount', String(Number(linkData.price || 0)))
+  const verifyUrl = verifyUrlObj.toString()
   const displayLink = verifyUrl
 
   const eLevy = calculateMoMoCosts({
@@ -29,11 +33,8 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
   }
 
   const getShareMessage = () => {
-    const total = linkData.totalToPay ?? linkData.price
-    if (linkData.status === 'pending_payment') {
-      return `SafeLink created for ${linkData.itemName} (GHS ${total.toFixed(2)}). Payment pending — escrow activates after payment. Verify: ${verifyUrl}`
-    }
-    return `Funds held in escrow for ${linkData.itemName} (GHS ${total.toFixed(2)} total). Verify: ${verifyUrl}`
+    const price = Number(linkData.price || 0)
+    return `SafeLink verified funds for "${linkData.itemName}" — Amount: GHS ${price.toFixed(2)}. Verify: ${verifyUrl}`
   }
 
   const handleShareWhatsApp = () => {
@@ -269,6 +270,7 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
                 <li>The seller can verify the deal status instantly</li>
                 <li>Once you receive the item, confirm in your dashboard</li>
                 <li>Funds will be released to the seller automatically</li>
+                <li>Always remind the customer to click confirm payment</li>
               </ol>
             </div>
           </div>
