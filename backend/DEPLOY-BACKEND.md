@@ -63,7 +63,7 @@ That URL is your **backend URL**.
 - **Redeploy** the frontend so the new build uses this URL.
 
 **B. Local frontend / Android app**  
-- In the **apps** root `.env` set:
+- Create an **apps root** `.env` from `.env.example` (do **not** commit it), then set:
   ```env
   VITE_API_BASE_URL=https://your-backend-url.up.railway.app
   ```

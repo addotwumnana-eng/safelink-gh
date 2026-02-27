@@ -7,7 +7,12 @@ android {
   }
 }
 
-apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
+def cordovaVariablesGradle = file("../capacitor-cordova-android-plugins/cordova.variables.gradle")
+if (cordovaVariablesGradle.exists()) {
+  apply from: cordovaVariablesGradle
+} else {
+  logger.lifecycle("cordova.variables.gradle not found; skipping Cordova plugin variables. If you use Cordova plugins, run 'npx cap sync android'.")
+}
 dependencies {
     implementation project(':capacitor-browser')
 
