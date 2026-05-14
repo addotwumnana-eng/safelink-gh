@@ -1,9 +1,21 @@
 import express from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDeals, getDealById, createDeal, updateDeal } from '../utils/database.js'
-import { initializePayment, verifyPayment } from '../services/paystack.js'
+import {
+  initializePayment,
+  verifyPayment,
+  releaseEscrowToSeller,
+  refundEscrowPayment,
+} from '../services/paystack.js'
 
 const router = express.Router()
+
+function buildSettlementWarning(settlement) {
+  if (settlement?.mode === 'simulated' && settlement?.reason) {
+    return `Escrow action ran in simulated mode: ${settlement.reason}`
+  }
+  return null
+}
 
 // Create a new deal and initialize Paystack payment
 router.post('/create', async (req, res) => {
@@ -152,21 +164,29 @@ router.post('/:id/confirm', async (req, res) => {
       return res.status(400).json({ error: 'Deal is not in paid state' })
     }
 
+    const settlement = await releaseEscrowToSeller(deal, `Release escrow for deal ${deal.id}`)
+
     const updated = await updateDeal(deal.id, {
       status: 'completed',
       completedAt: new Date().toISOString(),
+      settlement: {
+        ...(deal.settlement || {}),
+        released: settlement,
+      },
     })
 
-    // Here is where, in a full escrow, you would trigger a Paystack transfer to sellerMoMo
-
-    res.json({ deal: updated })
+    res.json({
+      deal: updated,
+      settlement,
+      warning: buildSettlementWarning(settlement),
+    })
   } catch (err) {
     console.error('Error confirming receipt:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
 
-// Cancel / refund (logical status change – actual refund would also call Paystack)
+// Cancel / refund
 router.post('/:id/cancel', async (req, res) => {
   try {
     const deal = await getDealById(req.params.id)
@@ -176,16 +196,101 @@ router.post('/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'Deal cannot be cancelled in current state' })
     }
 
+    const settlement = deal.status === 'paid'
+      ? await refundEscrowPayment(deal, `Refund cancelled deal ${deal.id}`)
+      : {
+          mode: 'simulated',
+          action: 'refund',
+          reason: 'Deal was pending_payment; no Paystack refund required',
+        }
+
     const updated = await updateDeal(deal.id, {
       status: 'cancelled',
       cancelledAt: new Date().toISOString(),
+      settlement: {
+        ...(deal.settlement || {}),
+        refunded: settlement,
+      },
     })
 
-    // In a full implementation, you’d call Paystack to refund here.
+    res.json({
+      deal: updated,
+      settlement,
+      warning: buildSettlementWarning(settlement),
+    })
+  } catch (err) {
+    console.error('Error cancelling deal:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.post('/:id/dispute', async (req, res) => {
+  try {
+    const deal = await getDealById(req.params.id)
+    if (!deal) return res.status(404).json({ error: 'Deal not found' })
+
+    if (deal.status !== 'paid' && deal.status !== 'active') {
+      return res.status(400).json({ error: 'Only paid/active deals can be disputed' })
+    }
+
+    const disputeReason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+    const updated = await updateDeal(deal.id, {
+      status: 'disputed',
+      disputedAt: new Date().toISOString(),
+      disputeReason: disputeReason || deal.disputeReason || null,
+    })
 
     res.json({ deal: updated })
   } catch (err) {
-    console.error('Error cancelling deal:', err)
+    console.error('Error opening dispute:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.post('/:id/dispute/resolve', async (req, res) => {
+  try {
+    const deal = await getDealById(req.params.id)
+    if (!deal) return res.status(404).json({ error: 'Deal not found' })
+
+    if (deal.status !== 'disputed') {
+      return res.status(400).json({ error: 'Deal is not in disputed state' })
+    }
+
+    const outcome = req.body?.outcome
+    if (outcome !== 'refund' && outcome !== 'release') {
+      return res.status(400).json({ error: "outcome must be either 'refund' or 'release'" })
+    }
+
+    const settlement = outcome === 'refund'
+      ? await refundEscrowPayment(deal, `Dispute resolved with refund for deal ${deal.id}`)
+      : await releaseEscrowToSeller(deal, `Dispute resolved with release for deal ${deal.id}`)
+
+    const updates = {
+      disputeResolvedAt: new Date().toISOString(),
+      disputeOutcome: outcome,
+      settlement: {
+        ...(deal.settlement || {}),
+        [outcome === 'refund' ? 'refunded' : 'released']: settlement,
+      },
+    }
+
+    if (outcome === 'refund') {
+      updates.status = 'cancelled'
+      updates.cancelledAt = new Date().toISOString()
+    } else {
+      updates.status = 'completed'
+      updates.completedAt = new Date().toISOString()
+    }
+
+    const updated = await updateDeal(deal.id, updates)
+
+    res.json({
+      deal: updated,
+      settlement,
+      warning: buildSettlementWarning(settlement),
+    })
+  } catch (err) {
+    console.error('Error resolving dispute:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
