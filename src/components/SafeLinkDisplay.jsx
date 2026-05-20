@@ -3,8 +3,17 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, CheckCircle, Shield, Lock, ExternalLink, CreditCard } from 'lucide-react'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
-import { DEFAULT_E_LEVY_RATE, calculateMoMoCosts } from '../utils/fees'
+import { DEFAULT_E_LEVY_RATE, DEFAULT_SERVICE_FEE_RATE, calculateMoMoCosts } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
+
+function toNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatPercent(rate) {
+  return `${(rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`
+}
 
 function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, showToast, onPaymentReturn, includeELevyEstimate, onToggleELevyEstimate }) {
   const [copied, setCopied] = useState(false)
@@ -20,6 +29,18 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
     amount: Number(linkData.price || 0),
     includeELevy: true,
   }).eLevy
+
+  const priceAmount = toNumber(linkData.price) ?? 0
+  const totalToPayFromDeal = toNumber(linkData.totalToPay)
+  const serviceFeeFromDeal = toNumber(linkData.serviceFee)
+  const serviceFeeAmount = serviceFeeFromDeal ?? (
+    totalToPayFromDeal !== null
+      ? Math.max(0, totalToPayFromDeal - priceAmount)
+      : Number((priceAmount * DEFAULT_SERVICE_FEE_RATE).toFixed(2))
+  )
+  const totalToPayAmount = totalToPayFromDeal ?? (priceAmount + serviceFeeAmount)
+  const serviceFeeRate = priceAmount > 0 ? serviceFeeAmount / priceAmount : DEFAULT_SERVICE_FEE_RATE
+  const serviceFeePercentLabel = formatPercent(serviceFeeRate)
 
   const handleCopy = async () => {
     try {
@@ -182,15 +203,15 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Price:</span>
-              <span className="text-white font-bold">GHS {Number(linkData.price).toFixed(2)}</span>
+              <span className="text-white font-bold">GHS {priceAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Service fee (1%):</span>
-              <span className="text-orange-400 font-medium">GHS {(linkData.serviceFee ?? 0).toFixed(2)}</span>
+              <span className="text-gray-400">Service fee ({serviceFeePercentLabel}):</span>
+              <span className="text-orange-400 font-medium">GHS {serviceFeeAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Total to pay:</span>
-              <span className="text-white font-bold text-lg">GHS {(linkData.totalToPay ?? linkData.price).toFixed(2)}</span>
+              <span className="text-white font-bold text-lg">GHS {totalToPayAmount.toFixed(2)}</span>
             </div>
             {includeELevyEstimate && (
               <div className="flex justify-between items-center">

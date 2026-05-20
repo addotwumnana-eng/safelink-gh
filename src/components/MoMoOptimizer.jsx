@@ -3,10 +3,12 @@ import { motion } from 'framer-motion'
 import { Calculator, TrendingUp } from 'lucide-react'
 import {
   DEFAULT_E_LEVY_RATE,
-  DEFAULT_SERVICE_FEE_RATE,
   calculateMoMoCosts,
 } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
+
+const MOMO_OPTIMIZER_SERVICE_FEE_RATE = 0.01
+const SERVICE_FEE_PERCENT_LABEL = `${(MOMO_OPTIMIZER_SERVICE_FEE_RATE * 100).toFixed(1).replace(/\.0$/, '')}%`
 
 function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
   const [amount, setAmount] = useState('')
@@ -16,7 +18,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
 
   const costs = calculateMoMoCosts({
     amount: parseFloat(amount || '0'),
-    serviceFeeRate: DEFAULT_SERVICE_FEE_RATE,
+    serviceFeeRate: MOMO_OPTIMIZER_SERVICE_FEE_RATE,
     eLevyRate: DEFAULT_E_LEVY_RATE,
     includeELevy,
   })
@@ -75,7 +77,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
               <span className="text-white font-bold">GHS {costs.base.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-400 text-sm">Service fee (1%):</span>
+              <span className="text-gray-400 text-sm">Service fee ({SERVICE_FEE_PERCENT_LABEL}):</span>
               <span className="text-orange-400 font-medium">+GHS {costs.serviceFee.toFixed(2)}</span>
             </div>
             {includeELevy && (
@@ -116,7 +118,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
               className="bg-deep-black/50 rounded-xl p-4 border border-gray-800 text-xs text-gray-400 space-y-2"
             >
               <p>
-                <strong className="text-gray-300">Service fee:</strong> 1% of the deal amount.
+                <strong className="text-gray-300">Service fee:</strong> {SERVICE_FEE_PERCENT_LABEL} of the deal amount.
               </p>
               {includeELevy && (
                 <p>

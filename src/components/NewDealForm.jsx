@@ -8,6 +8,7 @@ import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
 
 const API_BASE = getApiBaseUrl()
+const SERVICE_FEE_PERCENT_LABEL = `${(DEFAULT_SERVICE_FEE_RATE * 100).toFixed(1).replace(/\.0$/, '')}%`
 
 function NewDealForm({ onBack, includeELevyEstimate, onToggleELevyEstimate, showToast, onPaymentReturn }) {
   const [formData, setFormData] = useState({
@@ -236,7 +237,7 @@ function NewDealForm({ onBack, includeELevyEstimate, onToggleELevyEstimate, show
             {parseFloat(formData.price || '0') > 0 && (
               <div className="mt-3 bg-deep-black/40 rounded-xl p-4 border border-gray-800 space-y-2">
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>Service fee (1%)</span>
+                  <span>Service fee ({SERVICE_FEE_PERCENT_LABEL})</span>
                   <span className="text-orange-400">+GHS {previewCosts.serviceFee.toFixed(2)}</span>
                 </div>
                 {includeELevy && (

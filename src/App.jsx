@@ -9,6 +9,7 @@ import { getApiBaseUrl } from './utils/apiBase'
 const API_BASE = getApiBaseUrl()
 const PENDING_DEAL_KEY = 'safelink_pending_deal_id'
 const LAST_PAID_DEAL_KEY = 'safelink_last_paid_deal_id'
+const PAYMENT_VERIFY_ERROR_KEY = 'safelink_payment_verify_error'
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard')
@@ -104,11 +105,22 @@ function App() {
   const handlePaymentReturn = async () => {
     const nextDeals = await refreshDeals()
     if (nextDeals && maybeRevealSafeLinkAfterPayment(nextDeals)) return
+
+    let verifyError = null
+    try {
+      verifyError = localStorage.getItem(PAYMENT_VERIFY_ERROR_KEY)
+      if (verifyError) {
+        localStorage.removeItem(PAYMENT_VERIFY_ERROR_KEY)
+      }
+    } catch {
+      // ignore storage failures
+    }
+
     setCurrentView('dashboard')
     setGeneratedLink(null)
     setAuthorizationUrl(null)
     setPaymentError(null)
-    showToast('Payment complete!')
+    showToast(verifyError || 'Payment complete!')
   }
 
   // Refresh deals from backend
@@ -141,7 +153,11 @@ function App() {
 
       const data = await res.json()
       await refreshDeals()
-      showToast('Receipt confirmed! Funds released to seller.')
+      if (data?.warning) {
+        showToast(`Receipt confirmed. ${data.warning}`)
+      } else {
+        showToast('Receipt confirmed! Funds released to seller.')
+      }
     } catch (err) {
       console.error('Error confirming receipt:', err)
       showToast('Error confirming receipt. Please try again.')
@@ -163,41 +179,90 @@ function App() {
 
       const data = await res.json()
       await refreshDeals()
-      showToast('Deal cancelled. Funds returned.')
+      if (data?.warning) {
+        showToast(`Deal cancelled. ${data.warning}`)
+      } else {
+        showToast('Deal cancelled. Funds returned.')
+      }
     } catch (err) {
       console.error('Error cancelling deal:', err)
       showToast('Error cancelling deal. Please try again.')
     }
   }
 
-  const handleDispute = (dealId) => {
-    // For now, dispute is handled locally (backend doesn't have dispute endpoint yet)
-    const deal = deals.find((d) => d.id === dealId)
-    if (!deal || (deal.status !== 'paid' && deal.status !== 'active')) return
-    setDeals((d) =>
-      d.map((x) =>
-        x.id === dealId ? { ...x, status: 'disputed', disputedAt: new Date().toISOString() } : x
-      )
-    )
-    showToast('Dispute opened.')
+  const handleDispute = async (dealId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/deals/${dealId}/dispute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        showToast(error.error || 'Failed to open dispute')
+        return
+      }
+
+      await refreshDeals()
+      showToast('Dispute opened.')
+    } catch (err) {
+      console.error('Error opening dispute:', err)
+      showToast('Error opening dispute. Please try again.')
+    }
   }
 
-  const handleResolveDisputeRefund = (dealId) => {
-    const deal = deals.find((d) => d.id === dealId)
-    if (!deal || deal.status !== 'disputed') return
-    setDeals((d) =>
-      d.map((x) => (x.id === dealId ? { ...x, status: 'cancelled' } : x))
-    )
-    showToast('Dispute resolved. Funds returned.')
+  const handleResolveDisputeRefund = async (dealId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/deals/${dealId}/dispute/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome: 'refund' }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        showToast(error.error || 'Failed to resolve dispute')
+        return
+      }
+
+      const data = await res.json()
+      await refreshDeals()
+      if (data?.warning) {
+        showToast(`Dispute resolved (refund). ${data.warning}`)
+      } else {
+        showToast('Dispute resolved. Funds returned.')
+      }
+    } catch (err) {
+      console.error('Error resolving dispute with refund:', err)
+      showToast('Error resolving dispute. Please try again.')
+    }
   }
 
-  const handleResolveDisputeRelease = (dealId) => {
-    const deal = deals.find((d) => d.id === dealId)
-    if (!deal || deal.status !== 'disputed') return
-    setDeals((d) =>
-      d.map((x) => (x.id === dealId ? { ...x, status: 'completed' } : x))
-    )
-    showToast('Dispute resolved. Funds released to seller.')
+  const handleResolveDisputeRelease = async (dealId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/deals/${dealId}/dispute/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome: 'release' }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        showToast(error.error || 'Failed to resolve dispute')
+        return
+      }
+
+      const data = await res.json()
+      await refreshDeals()
+      if (data?.warning) {
+        showToast(`Dispute resolved (release). ${data.warning}`)
+      } else {
+        showToast('Dispute resolved. Funds released to seller.')
+      }
+    } catch (err) {
+      console.error('Error resolving dispute with release:', err)
+      showToast('Error resolving dispute. Please try again.')
+    }
   }
 
   const handleViewSafeLink = (deal) => {

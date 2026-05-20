@@ -5,7 +5,7 @@ A modern, mobile-first React web application for trust-based escrow and payment 
 ## Features
 
 - **Dashboard**: Trust Score (0–100, from deal history), Holding (Escrow) and Available balance, **Top up**, My Deals
-- **New Secure Deal**: Create escrow transactions with item name, price (GHS), seller MoMo; 1% service fee; insufficient-balance check
+- **New Secure Deal**: Create escrow transactions with item name, price (GHS), seller MoMo; 2.5% service fee; insufficient-balance check
 - **SafeLink**: Generate and share links (Copy, WhatsApp, SMS); **View SafeLink** from My Deals for active deals
 - **My Deals**: **Confirm receipt**, **Cancel deal** (refund), status: Active / Completed / Cancelled
 - **MoMo Optimizer**: Calculate 1% service fee (Total, Net, Show details)

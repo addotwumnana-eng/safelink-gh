@@ -39,6 +39,9 @@ In your Railway project → **Variables** (or **Settings** → **Variables**), a
 | `PAYSTACK_SECRET_KEY` | Your Paystack secret key (e.g. `sk_test_...` or `sk_live_...`) |
 | `PAYSTACK_PUBLIC_KEY` | Your Paystack public key |
 | `DATABASE_PATH` | `./data/deals.json` (default; optional) |
+| `PAYSTACK_ESCROW_ACTIONS` | `enabled` (default) or `disabled` to simulate refunds/payouts without moving money |
+| `PAYSTACK_GH_MOBILE_MONEY_BANK_CODE` | Required for live seller payouts if you are not using a fixed recipient code |
+| `PAYSTACK_TRANSFER_RECIPIENT_CODE` | Optional fixed Paystack recipient code for seller releases |
 | `NODE_ENV` | `production` |
 
 Railway usually injects `PORT`; if it does, you can omit it. If the app fails to start, set `PORT` to `3001`.
