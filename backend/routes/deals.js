@@ -17,6 +17,39 @@ function buildSettlementWarning(settlement) {
   return null
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function verifyPaymentWithRetry(reference, attempts = 3, delayMs = 1200) {
+  let lastData = null
+
+  for (let index = 0; index < attempts; index += 1) {
+    const isLast = index === attempts - 1
+    try {
+      const verifyResp = await verifyPayment(reference)
+      const data = verifyResp?.data
+      lastData = data || null
+
+      if (data?.status === 'success') {
+        return { ok: true, data }
+      }
+
+      const status = String(data?.status || '').toLowerCase()
+      const terminalFailure = status && status !== 'pending'
+      if (isLast || terminalFailure) {
+        return { ok: false, data }
+      }
+    } catch (err) {
+      if (isLast) throw err
+    }
+
+    await delay(delayMs)
+  }
+
+  return { ok: false, data: lastData }
+}
+
 // Create a new deal and initialize Paystack payment
 router.post('/create', async (req, res) => {
   try {
@@ -110,16 +143,34 @@ router.post('/verify-payment', async (req, res) => {
       return res.status(404).json({ error: 'Deal not found for this reference' })
     }
 
-    const verifyResp = await verifyPayment(reference)
-    const data = verifyResp?.data
+    // Idempotent callback: if this deal was already verified for this reference, return success.
+    if (
+      deal.paymentReference === reference &&
+      (deal.status === 'paid' || deal.status === 'completed' || deal.status === 'disputed' || deal.status === 'cancelled')
+    ) {
+      return res.json({ deal, alreadyVerified: true })
+    }
 
-    if (!data || data.status !== 'success') {
-      return res.status(400).json({ error: 'Payment not successful', paystack: data })
+    const verification = await verifyPaymentWithRetry(reference)
+    const data = verification?.data
+
+    if (!verification.ok) {
+      const status = String(data?.status || '').toLowerCase()
+      const retryable = status === 'pending' || !status
+      const gatewayMessage = data?.gateway_response || data?.message || null
+      return res.status(retryable ? 409 : 400).json({
+        error: retryable
+          ? 'Payment verification is still pending. Please wait a few seconds and retry.'
+          : 'Payment not successful',
+        details: gatewayMessage,
+        retryable,
+        paystack: data,
+      })
     }
 
     const updated = await updateDeal(deal.id, {
-      status: 'paid',
-      paidAt: new Date().toISOString(),
+      status: deal.status === 'pending_payment' ? 'paid' : deal.status,
+      paidAt: deal.paidAt || new Date().toISOString(),
       paymentReference: reference,
       paystackData: data,
     })
@@ -127,7 +178,11 @@ router.post('/verify-payment', async (req, res) => {
     res.json({ deal: updated })
   } catch (err) {
     console.error('Error verifying payment:', err)
-    res.status(500).json({ error: 'Internal server error' })
+    res.status(502).json({
+      error: 'Could not verify payment with Paystack',
+      details: err?.message || 'Unknown Paystack verification error',
+      retryable: true,
+    })
   }
 })
 

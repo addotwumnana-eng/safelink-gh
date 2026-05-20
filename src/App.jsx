@@ -9,6 +9,7 @@ import { getApiBaseUrl } from './utils/apiBase'
 const API_BASE = getApiBaseUrl()
 const PENDING_DEAL_KEY = 'safelink_pending_deal_id'
 const LAST_PAID_DEAL_KEY = 'safelink_last_paid_deal_id'
+const PAYMENT_VERIFY_ERROR_KEY = 'safelink_payment_verify_error'
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard')
@@ -104,11 +105,22 @@ function App() {
   const handlePaymentReturn = async () => {
     const nextDeals = await refreshDeals()
     if (nextDeals && maybeRevealSafeLinkAfterPayment(nextDeals)) return
+
+    let verifyError = null
+    try {
+      verifyError = localStorage.getItem(PAYMENT_VERIFY_ERROR_KEY)
+      if (verifyError) {
+        localStorage.removeItem(PAYMENT_VERIFY_ERROR_KEY)
+      }
+    } catch {
+      // ignore storage failures
+    }
+
     setCurrentView('dashboard')
     setGeneratedLink(null)
     setAuthorizationUrl(null)
     setPaymentError(null)
-    showToast('Payment complete!')
+    showToast(verifyError || 'Payment complete!')
   }
 
   // Refresh deals from backend

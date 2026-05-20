@@ -118,3 +118,19 @@ test('cancel pending payment skips live refund', async () => {
   assert.equal(res.body.settlement.mode, 'simulated')
   assert.match(res.body.settlement.reason, /no paystack refund required/i)
 })
+
+test('verify-payment returns already verified deal idempotently', async () => {
+  const deal = await seedDeal('paid', {
+    paymentReference: 'SL-VERIFY-EXISTING',
+    reference: 'SL-VERIFY-EXISTING',
+  })
+
+  const res = await request(app)
+    .post('/api/deals/verify-payment')
+    .send({ reference: 'SL-VERIFY-EXISTING' })
+    .expect(200)
+
+  assert.equal(res.body.alreadyVerified, true)
+  assert.equal(res.body.deal.id, deal.id)
+  assert.equal(res.body.deal.status, 'paid')
+})
