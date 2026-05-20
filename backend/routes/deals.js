@@ -1,6 +1,6 @@
 import express from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDeals, getDealById, createDeal, updateDeal } from '../utils/database.js'
+import { getDeals, getDealById, createDeal, saveDeals, updateDeal } from '../utils/database.js'
 import {
   initializePayment,
   verifyPayment,
@@ -10,6 +10,30 @@ import {
 
 const router = express.Router()
 const SERVICE_FEE_RATE = 0.025
+
+function round2(n) {
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100
+}
+
+function normalizeDealFinancials(deal) {
+  const price = Math.max(0, Number(deal?.price || 0))
+  const serviceFee = round2(price * SERVICE_FEE_RATE)
+  const totalToPay = round2(price + serviceFee)
+  return {
+    ...deal,
+    serviceFee,
+    totalToPay,
+    serviceFeeRate: SERVICE_FEE_RATE,
+  }
+}
+
+function hasFinancialDrift(original, normalized) {
+  return (
+    round2(original?.serviceFee) !== round2(normalized?.serviceFee) ||
+    round2(original?.totalToPay) !== round2(normalized?.totalToPay) ||
+    Number(original?.serviceFeeRate || 0) !== SERVICE_FEE_RATE
+  )
+}
 
 function buildSettlementWarning(settlement) {
   if (settlement?.mode === 'simulated' && settlement?.reason) {
@@ -65,24 +89,19 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ error: 'Invalid price' })
     }
 
-    const serviceFee = numericPrice * SERVICE_FEE_RATE
-    const totalToPay = numericPrice + serviceFee
-
     const id = uuidv4()
     const reference = `SL-${id}`
 
-    const deal = {
+    const deal = normalizeDealFinancials({
       id,
       itemName,
       price: numericPrice,
-      serviceFee,
-      totalToPay,
       sellerMoMo,
       buyerEmail,
       status: 'pending_payment',
       reference,
       createdAt: new Date().toISOString(),
-    }
+    })
 
     await createDeal(deal)
 
@@ -93,7 +112,7 @@ router.post('/create', async (req, res) => {
     try {
       const paystackResp = await initializePayment({
         email: buyerEmail,
-        amount: totalToPay,
+        amount: deal.totalToPay,
         reference,
         metadata: {
           dealId: id,
@@ -142,13 +161,19 @@ router.post('/verify-payment', async (req, res) => {
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found for this reference' })
     }
+    const normalizedDeal = normalizeDealFinancials(deal)
 
     // Idempotent callback: if this deal was already verified for this reference, return success.
     if (
-      deal.paymentReference === reference &&
-      (deal.status === 'paid' || deal.status === 'completed' || deal.status === 'disputed' || deal.status === 'cancelled')
+      normalizedDeal.paymentReference === reference &&
+      (
+        normalizedDeal.status === 'paid' ||
+        normalizedDeal.status === 'completed' ||
+        normalizedDeal.status === 'disputed' ||
+        normalizedDeal.status === 'cancelled'
+      )
     ) {
-      return res.json({ deal, alreadyVerified: true })
+      return res.json({ deal: normalizedDeal, alreadyVerified: true })
     }
 
     const verification = await verifyPaymentWithRetry(reference)
@@ -169,13 +194,14 @@ router.post('/verify-payment', async (req, res) => {
     }
 
     const updated = await updateDeal(deal.id, {
-      status: deal.status === 'pending_payment' ? 'paid' : deal.status,
-      paidAt: deal.paidAt || new Date().toISOString(),
+      ...normalizedDeal,
+      status: normalizedDeal.status === 'pending_payment' ? 'paid' : normalizedDeal.status,
+      paidAt: normalizedDeal.paidAt || new Date().toISOString(),
       paymentReference: reference,
       paystackData: data,
     })
 
-    res.json({ deal: updated })
+    res.json({ deal: normalizeDealFinancials(updated) })
   } catch (err) {
     console.error('Error verifying payment:', err)
     res.status(502).json({
@@ -190,7 +216,12 @@ router.post('/verify-payment', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const deals = await getDeals()
-    res.json(deals)
+    const normalizedDeals = deals.map(normalizeDealFinancials)
+    const hasChanges = deals.some((deal, index) => hasFinancialDrift(deal, normalizedDeals[index]))
+    if (hasChanges) {
+      await saveDeals(normalizedDeals)
+    }
+    res.json(normalizedDeals)
   } catch (err) {
     console.error('Error listing deals:', err)
     res.status(500).json({ error: 'Internal server error' })
@@ -202,7 +233,11 @@ router.get('/:id', async (req, res) => {
   try {
     const deal = await getDealById(req.params.id)
     if (!deal) return res.status(404).json({ error: 'Deal not found' })
-    res.json(deal)
+    const normalizedDeal = normalizeDealFinancials(deal)
+    if (hasFinancialDrift(deal, normalizedDeal)) {
+      await updateDeal(deal.id, normalizedDeal)
+    }
+    res.json(normalizedDeal)
   } catch (err) {
     console.error('Error getting deal:', err)
     res.status(500).json({ error: 'Internal server error' })
@@ -212,7 +247,8 @@ router.get('/:id', async (req, res) => {
 // Confirm receipt (release funds to seller - logically)
 router.post('/:id/confirm', async (req, res) => {
   try {
-    const deal = await getDealById(req.params.id)
+    const rawDeal = await getDealById(req.params.id)
+    const deal = rawDeal ? normalizeDealFinancials(rawDeal) : null
     if (!deal) return res.status(404).json({ error: 'Deal not found' })
 
     if (deal.status !== 'paid') {
@@ -222,6 +258,7 @@ router.post('/:id/confirm', async (req, res) => {
     const settlement = await releaseEscrowToSeller(deal, `Release escrow for deal ${deal.id}`)
 
     const updated = await updateDeal(deal.id, {
+      ...deal,
       status: 'completed',
       completedAt: new Date().toISOString(),
       settlement: {
@@ -231,7 +268,7 @@ router.post('/:id/confirm', async (req, res) => {
     })
 
     res.json({
-      deal: updated,
+      deal: normalizeDealFinancials(updated),
       settlement,
       warning: buildSettlementWarning(settlement),
     })
@@ -244,7 +281,8 @@ router.post('/:id/confirm', async (req, res) => {
 // Cancel / refund
 router.post('/:id/cancel', async (req, res) => {
   try {
-    const deal = await getDealById(req.params.id)
+    const rawDeal = await getDealById(req.params.id)
+    const deal = rawDeal ? normalizeDealFinancials(rawDeal) : null
     if (!deal) return res.status(404).json({ error: 'Deal not found' })
 
     if (deal.status !== 'paid' && deal.status !== 'pending_payment') {
@@ -260,6 +298,7 @@ router.post('/:id/cancel', async (req, res) => {
         }
 
     const updated = await updateDeal(deal.id, {
+      ...deal,
       status: 'cancelled',
       cancelledAt: new Date().toISOString(),
       settlement: {
@@ -269,7 +308,7 @@ router.post('/:id/cancel', async (req, res) => {
     })
 
     res.json({
-      deal: updated,
+      deal: normalizeDealFinancials(updated),
       settlement,
       warning: buildSettlementWarning(settlement),
     })
@@ -281,7 +320,8 @@ router.post('/:id/cancel', async (req, res) => {
 
 router.post('/:id/dispute', async (req, res) => {
   try {
-    const deal = await getDealById(req.params.id)
+    const rawDeal = await getDealById(req.params.id)
+    const deal = rawDeal ? normalizeDealFinancials(rawDeal) : null
     if (!deal) return res.status(404).json({ error: 'Deal not found' })
 
     if (deal.status !== 'paid' && deal.status !== 'active') {
@@ -290,12 +330,13 @@ router.post('/:id/dispute', async (req, res) => {
 
     const disputeReason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
     const updated = await updateDeal(deal.id, {
+      ...deal,
       status: 'disputed',
       disputedAt: new Date().toISOString(),
       disputeReason: disputeReason || deal.disputeReason || null,
     })
 
-    res.json({ deal: updated })
+    res.json({ deal: normalizeDealFinancials(updated) })
   } catch (err) {
     console.error('Error opening dispute:', err)
     res.status(500).json({ error: 'Internal server error' })
@@ -304,7 +345,8 @@ router.post('/:id/dispute', async (req, res) => {
 
 router.post('/:id/dispute/resolve', async (req, res) => {
   try {
-    const deal = await getDealById(req.params.id)
+    const rawDeal = await getDealById(req.params.id)
+    const deal = rawDeal ? normalizeDealFinancials(rawDeal) : null
     if (!deal) return res.status(404).json({ error: 'Deal not found' })
 
     if (deal.status !== 'disputed') {
@@ -340,7 +382,7 @@ router.post('/:id/dispute/resolve', async (req, res) => {
     const updated = await updateDeal(deal.id, updates)
 
     res.json({
-      deal: updated,
+      deal: normalizeDealFinancials(updated),
       settlement,
       warning: buildSettlementWarning(settlement),
     })

@@ -134,3 +134,21 @@ test('verify-payment returns already verified deal idempotently', async () => {
   assert.equal(res.body.deal.id, deal.id)
   assert.equal(res.body.deal.status, 'paid')
 })
+
+test('list normalizes existing deal financials to 2.5 percent', async () => {
+  await seedDeal('paid', {
+    price: 150,
+    serviceFee: 1.5,
+    totalToPay: 151.5,
+  })
+
+  const res = await request(app)
+    .get('/api/deals')
+    .expect(200)
+
+  assert.equal(Array.isArray(res.body), true)
+  assert.equal(res.body.length, 1)
+  assert.equal(res.body[0].serviceFee, 3.75)
+  assert.equal(res.body[0].totalToPay, 153.75)
+  assert.equal(res.body[0].serviceFeeRate, 0.025)
+})
