@@ -3,12 +3,12 @@ import { motion } from 'framer-motion'
 import { Calculator, TrendingUp } from 'lucide-react'
 import {
   DEFAULT_E_LEVY_RATE,
+  DEFAULT_SERVICE_FEE_RATE,
   calculateMoMoCosts,
 } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
 
-const MOMO_OPTIMIZER_SERVICE_FEE_RATE = 0.01
-const SERVICE_FEE_PERCENT_LABEL = `${(MOMO_OPTIMIZER_SERVICE_FEE_RATE * 100).toFixed(1).replace(/\.0$/, '')}%`
+const SERVICE_FEE_PERCENT_LABEL = `${(DEFAULT_SERVICE_FEE_RATE * 100).toFixed(1).replace(/\.0$/, '')}%`
 
 function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
   const [amount, setAmount] = useState('')
@@ -18,7 +18,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
 
   const costs = calculateMoMoCosts({
     amount: parseFloat(amount || '0'),
-    serviceFeeRate: MOMO_OPTIMIZER_SERVICE_FEE_RATE,
+    serviceFeeRate: DEFAULT_SERVICE_FEE_RATE,
     eLevyRate: DEFAULT_E_LEVY_RATE,
     includeELevy,
   })
