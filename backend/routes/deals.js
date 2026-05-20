@@ -9,6 +9,7 @@ import {
 } from '../services/paystack.js'
 
 const router = express.Router()
+const SERVICE_FEE_RATE = 0.025
 
 function buildSettlementWarning(settlement) {
   if (settlement?.mode === 'simulated' && settlement?.reason) {
@@ -64,8 +65,7 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ error: 'Invalid price' })
     }
 
-    const serviceFeeRate = 0.01
-    const serviceFee = numericPrice * serviceFeeRate
+    const serviceFee = numericPrice * SERVICE_FEE_RATE
     const totalToPay = numericPrice + serviceFee
 
     const id = uuidv4()

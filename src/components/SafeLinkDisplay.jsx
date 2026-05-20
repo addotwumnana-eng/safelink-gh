@@ -3,8 +3,10 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, CheckCircle, Shield, Lock, ExternalLink, CreditCard } from 'lucide-react'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
-import { DEFAULT_E_LEVY_RATE, calculateMoMoCosts } from '../utils/fees'
+import { DEFAULT_E_LEVY_RATE, DEFAULT_SERVICE_FEE_RATE, calculateMoMoCosts } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
+
+const SERVICE_FEE_PERCENT_LABEL = `${(DEFAULT_SERVICE_FEE_RATE * 100).toFixed(1).replace(/\.0$/, '')}%`
 
 function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, showToast, onPaymentReturn, includeELevyEstimate, onToggleELevyEstimate }) {
   const [copied, setCopied] = useState(false)
@@ -185,7 +187,7 @@ function SafeLinkDisplay({ linkData, authorizationUrl, paymentError, onBack, sho
               <span className="text-white font-bold">GHS {Number(linkData.price).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Service fee (1%):</span>
+              <span className="text-gray-400">Service fee ({SERVICE_FEE_PERCENT_LABEL}):</span>
               <span className="text-orange-400 font-medium">GHS {(linkData.serviceFee ?? 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">

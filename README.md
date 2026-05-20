@@ -5,10 +5,10 @@ A modern, mobile-first React web application for trust-based escrow and payment 
 ## Features
 
 - **Dashboard**: Trust Score (0–100, from deal history), Holding (Escrow) and Available balance, **Top up**, My Deals
-- **New Secure Deal**: Create escrow transactions with item name, price (GHS), seller MoMo; 1% service fee; insufficient-balance check
+- **New Secure Deal**: Create escrow transactions with item name, price (GHS), seller MoMo; 2.5% service fee; insufficient-balance check
 - **SafeLink**: Generate and share links (Copy, WhatsApp, SMS); **View SafeLink** from My Deals for active deals
 - **My Deals**: **Confirm receipt**, **Cancel deal** (refund), status: Active / Completed / Cancelled
-- **MoMo Optimizer**: Calculate 1% service fee (Total, Net, Show details)
+- **MoMo Optimizer**: Calculate 2.5% service fee (Total, Net, Show details)
 - **Persistence**: Deals and balances saved in `localStorage` (survive refresh)
 - **Toasts**: “Deal created”, “Receipt confirmed”, “Link copied”, “Funds added”, “Deal cancelled. Funds returned.”
 - **Modern UI**: Dark theme with Ghana Gold (#FFD700) accent
@@ -44,7 +44,7 @@ src/
   │   ├── Dashboard.jsx          # Dashboard, balances, Top up, My Deals (View SafeLink, Confirm, Cancel)
   │   ├── NewDealForm.jsx        # New secure deal form
   │   ├── SafeLinkDisplay.jsx    # SafeLink view: copy, share WhatsApp/SMS
-  │   ├── MoMoOptimizer.jsx      # 1% fee calculator
+  │   ├── MoMoOptimizer.jsx      # 2.5% fee calculator
   │   └── Toast.jsx              # Toast notifications
   ├── App.jsx                    # Main app, view state, deals & balance logic
   ├── main.jsx                   # Entry point

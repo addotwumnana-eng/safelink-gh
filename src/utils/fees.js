@@ -6,7 +6,7 @@
  * - "E‑Levy" varies by channel/provider and exemptions; this is a calculator model.
  */
 
-export const DEFAULT_SERVICE_FEE_RATE = 0.01
+export const DEFAULT_SERVICE_FEE_RATE = 0.025
 export const DEFAULT_E_LEVY_RATE = 0.01
 
 export function toMoney(n) {

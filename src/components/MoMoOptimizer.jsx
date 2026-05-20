@@ -8,6 +8,8 @@ import {
 } from '../utils/fees'
 import ELevyToggle from './ELevyToggle'
 
+const SERVICE_FEE_PERCENT_LABEL = `${(DEFAULT_SERVICE_FEE_RATE * 100).toFixed(1).replace(/\.0$/, '')}%`
+
 function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
   const [amount, setAmount] = useState('')
   const [showDetails, setShowDetails] = useState(false)
@@ -75,7 +77,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
               <span className="text-white font-bold">GHS {costs.base.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-400 text-sm">Service fee (1%):</span>
+              <span className="text-gray-400 text-sm">Service fee ({SERVICE_FEE_PERCENT_LABEL}):</span>
               <span className="text-orange-400 font-medium">+GHS {costs.serviceFee.toFixed(2)}</span>
             </div>
             {includeELevy && (
@@ -116,7 +118,7 @@ function MoMoOptimizer({ includeELevyEstimate, onToggleELevyEstimate }) {
               className="bg-deep-black/50 rounded-xl p-4 border border-gray-800 text-xs text-gray-400 space-y-2"
             >
               <p>
-                <strong className="text-gray-300">Service fee:</strong> 1% of the deal amount.
+                <strong className="text-gray-300">Service fee:</strong> {SERVICE_FEE_PERCENT_LABEL} of the deal amount.
               </p>
               {includeELevy && (
                 <p>
