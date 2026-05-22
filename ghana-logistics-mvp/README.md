@@ -1,4 +1,4 @@
-# Voda Haul - Ghana Logistics MVP
+# CarryGO - Ghana Logistics MVP
 
 Production-ready monorepo foundation for an Accra-first logistics marketplace connecting customers with mini trucks, pickups, tippers, and cargo vehicles.
 

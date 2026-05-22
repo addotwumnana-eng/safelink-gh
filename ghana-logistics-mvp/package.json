@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:mobile": "npm run dev --workspace @voda/mobile",
-    "dev:admin": "npm run dev --workspace @voda/admin",
+    "dev:mobile": "npm run dev --workspace @carrygo/mobile",
+    "dev:admin": "npm run dev --workspace @carrygo/admin",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format": "npm run format --workspaces --if-present"

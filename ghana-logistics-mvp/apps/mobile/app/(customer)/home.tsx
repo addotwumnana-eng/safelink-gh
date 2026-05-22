@@ -39,7 +39,7 @@ export default function CustomerHomeScreen() {
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.brand, { color: theme.accent }]}>Voda Haul</Text>
+          <Text style={[styles.brand, { color: theme.accent }]}>CarryGO</Text>
           <Text style={[styles.title, { color: theme.textPrimary }]}>Book your truck</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Find trusted drivers nearby for household moves, market deliveries, and cargo transport.

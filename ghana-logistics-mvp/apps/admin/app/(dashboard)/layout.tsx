@@ -9,7 +9,7 @@ export default function DashboardLayout({
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-              Voda Haul
+              CarryGO
             </p>
             <h1 className="text-lg font-bold">Operations Dashboard</h1>
           </div>

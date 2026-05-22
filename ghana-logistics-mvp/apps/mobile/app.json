@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Voda Haul",
-    "slug": "voda-haul",
-    "scheme": "vodahaul",
+    "name": "CarryGO",
+    "slug": "carrygo",
+    "scheme": "carrygo",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -13,7 +13,7 @@
       "expo-router"
     ],
     "android": {
-      "package": "com.vodahaul.app",
+      "package": "com.carrygo.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"

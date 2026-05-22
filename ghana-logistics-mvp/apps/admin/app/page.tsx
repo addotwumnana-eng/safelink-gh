@@ -5,7 +5,7 @@ export default function LandingPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center px-6">
       <div className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-2xl">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
-          Voda Haul
+          CarryGO
         </p>
         <h1 className="mt-3 text-4xl font-extrabold">Admin Operations Console</h1>
         <p className="mt-3 text-sm text-[var(--text-secondary)]">

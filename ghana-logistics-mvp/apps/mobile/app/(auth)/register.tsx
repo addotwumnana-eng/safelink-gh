@@ -74,7 +74,7 @@ export default function RegisterScreen() {
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.textPrimary }]}>Create account</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Join Voda Haul for secure logistics in Accra.
+          Join CarryGO for secure logistics in Accra.
         </Text>
       </View>
 

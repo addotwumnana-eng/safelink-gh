@@ -43,7 +43,7 @@ export default function OnboardingScreen() {
   return (
     <ScreenContainer>
       <View style={styles.topArea}>
-        <Text style={[styles.badge, { color: theme.accent }]}>Voda Haul</Text>
+        <Text style={[styles.badge, { color: theme.accent }]}>CarryGO</Text>
         <Text style={[styles.title, { color: theme.textPrimary }]}>{current.title}</Text>
         <Text style={[styles.body, { color: theme.textSecondary }]}>{current.body}</Text>
       </View>
