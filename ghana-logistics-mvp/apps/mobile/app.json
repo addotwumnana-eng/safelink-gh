@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Voda Haul",
+    "slug": "voda-haul",
+    "scheme": "vodahaul",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-router"
+    ],
+    "android": {
+      "package": "com.vodahaul.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    }
+  }
+}

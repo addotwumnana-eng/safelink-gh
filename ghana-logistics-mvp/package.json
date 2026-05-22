@@ -1,0 +1,21 @@
+{
+  "name": "ghana-logistics-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Accra-focused truck logistics marketplace monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run dev --workspace @voda/mobile",
+    "dev:admin": "npm run dev --workspace @voda/admin",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "npm run format --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.11.1",
+    "npm": ">=10.2.4"
+  }
+}

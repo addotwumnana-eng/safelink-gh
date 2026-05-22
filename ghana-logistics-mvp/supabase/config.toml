@@ -1,0 +1,5 @@
+[functions.paystack-webhook]
+verify_jwt = false
+
+[functions.release-escrow]
+verify_jwt = true
