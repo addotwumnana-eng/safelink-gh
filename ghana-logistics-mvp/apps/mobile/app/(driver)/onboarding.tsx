@@ -34,7 +34,7 @@ export default function DriverOnboardingScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<DriverOnboardingProgress | null>(null);
-  const [municipality, setMunicipality] = useState(ACCRA_MUNICIPALITIES[0]);
+  const [municipality, setMunicipality] = useState<string>(ACCRA_MUNICIPALITIES[0]);
   const [ghanaCardNumber, setGhanaCardNumber] = useState("");
   const [truckType, setTruckType] = useState<TruckType>("mini_truck");
   const [truckDisplayName, setTruckDisplayName] = useState("");
@@ -115,6 +115,9 @@ export default function DriverOnboardingScreen() {
     }
 
     const asset = result.assets[0];
+    if (!asset) {
+      return null;
+    }
     const extension = getFileExtension(asset.fileName, asset.mimeType);
     return {
       uri: asset.uri,
