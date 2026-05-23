@@ -10,7 +10,14 @@
       "**/*"
     ],
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CarryGO needs access to your photos to upload driver documents.",
+          "cameraPermission": "CarryGO needs camera access for selfie verification."
+        }
+      ]
     ],
     "android": {
       "package": "com.carrygo.app",

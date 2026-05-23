@@ -13,8 +13,10 @@ import { router } from "expo-router";
 import { AppButton } from "@/components/AppButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuthSession } from "@/hooks/useAuthSession";
+import { getDriverOnboardingProgress } from "@/lib/driverOnboarding";
 import { supabase } from "@/lib/supabase";
 import { darkTheme, lightTheme } from "@/theme/colors";
+import type { DriverOnboardingProgress } from "@/types/domain";
 
 type JobCard = {
   id: string;
@@ -27,6 +29,10 @@ type JobCard = {
 
 export default function DriverHomeScreen() {
   const [isOnline, setIsOnline] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState("pending");
+  const [onboardingProgress, setOnboardingProgress] = useState<DriverOnboardingProgress | null>(
+    null
+  );
   const [jobs, setJobs] = useState<JobCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingOnline, setUpdatingOnline] = useState(false);
@@ -44,7 +50,7 @@ export default function DriverHomeScreen() {
     const [driverResponse, jobsResponse] = await Promise.all([
       supabase
         .from("drivers")
-        .select("is_online")
+        .select("is_online, verification_status")
         .eq("user_id", session.user.id)
         .single(),
       supabase
@@ -60,6 +66,9 @@ export default function DriverHomeScreen() {
       setErrorMessage(driverResponse.error.message);
     } else {
       setIsOnline(driverResponse.data?.is_online ?? false);
+      setVerificationStatus(driverResponse.data?.verification_status ?? "pending");
+      const progress = await getDriverOnboardingProgress(session.user.id);
+      setOnboardingProgress(progress);
     }
 
     if (jobsResponse.error) {
@@ -86,6 +95,11 @@ export default function DriverHomeScreen() {
 
   const toggleOnline = async (next: boolean) => {
     if (!session?.user.id) {
+      return;
+    }
+
+    if (next && !onboardingProgress?.complete) {
+      setErrorMessage("Complete onboarding and wait for approval before going online.");
       return;
     }
 
@@ -127,14 +141,48 @@ export default function DriverHomeScreen() {
             <Text style={{ color: theme.textSecondary, marginTop: 4 }}>
               {isOnline ? "Online and visible to customers" : "Offline - currently hidden"}
             </Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 4 }}>
+              Verification status: {verificationStatus.toUpperCase()}
+            </Text>
           </View>
           <Switch
             value={isOnline}
             onValueChange={toggleOnline}
-            disabled={updatingOnline}
+            disabled={updatingOnline || !onboardingProgress?.complete || verificationStatus !== "approved"}
             trackColor={{ false: theme.border, true: theme.success }}
           />
         </View>
+
+        {onboardingProgress && !onboardingProgress.complete ? (
+          <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+              Complete onboarding to receive jobs
+            </Text>
+            <Text style={[styles.helperText, { color: theme.textSecondary }]}>
+              Upload your Ghana Card, selfie verification, and truck photos for quick approval.
+            </Text>
+            <View style={styles.progressList}>
+              <Text style={{ color: theme.textSecondary }}>
+                {onboardingProgress.hasGhanaCardNumber ? "✓" : "•"} Ghana Card details
+              </Text>
+              <Text style={{ color: theme.textSecondary }}>
+                {onboardingProgress.hasGhanaCardImage ? "✓" : "•"} Ghana Card image
+              </Text>
+              <Text style={{ color: theme.textSecondary }}>
+                {onboardingProgress.hasSelfieImage ? "✓" : "•"} Selfie verification
+              </Text>
+              <Text style={{ color: theme.textSecondary }}>
+                {onboardingProgress.hasVehicleProfile ? "✓" : "•"} Vehicle profile
+              </Text>
+              <Text style={{ color: theme.textSecondary }}>
+                {onboardingProgress.hasTruckPhotos ? "✓" : "•"} Truck photos
+              </Text>
+            </View>
+            <View style={{ marginTop: 12 }}>
+              <AppButton label="Continue onboarding" onPress={() => router.push("/(driver)/onboarding")} />
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Active jobs</Text>
@@ -206,6 +254,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700"
   },
+  sectionCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 16
+  },
   section: {
     marginTop: 22,
     gap: 10
@@ -227,6 +281,15 @@ const styles = StyleSheet.create({
   },
   jobMeta: {
     fontSize: 13
+  },
+  helperText: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 20
+  },
+  progressList: {
+    marginTop: 10,
+    gap: 6
   },
   footerButtons: {
     marginTop: 24,

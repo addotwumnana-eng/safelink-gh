@@ -1,4 +1,10 @@
 export type AppRole = "customer" | "driver" | "admin";
+export type TruckType =
+  | "mini_truck"
+  | "kia_rhino"
+  | "pickup"
+  | "tipper_truck"
+  | "long_cargo_truck";
 
 export interface Profile {
   id: string;
@@ -16,4 +22,14 @@ export interface NearbyDriverCard {
   capacity_kg: number;
   average_rating: number;
   photo_url: string | null;
+}
+
+export interface DriverOnboardingProgress {
+  hasGhanaCardNumber: boolean;
+  hasMunicipality: boolean;
+  hasGhanaCardImage: boolean;
+  hasSelfieImage: boolean;
+  hasTruckPhotos: boolean;
+  hasVehicleProfile: boolean;
+  complete: boolean;
 }

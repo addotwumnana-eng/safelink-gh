@@ -6,9 +6,11 @@ export const ACCRA_MUNICIPALITIES = [
   "Tema",
   "Achimota",
   "Ablekuma",
+  "Dansoman",
   "Ga East",
   "Ashaiman",
   "Kasoa",
+  "Weija",
   "Circle",
   "Kaneshie"
 ] as const;
