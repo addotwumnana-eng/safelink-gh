@@ -1,11 +1,13 @@
 import express from 'express'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { analyzeWebsite, analyzeAppIdentity } from '../services/riskEngine.js'
 import { readJsonFile } from '../utils/jsonStore.js'
 
 const router = express.Router()
 
-const dataDir = path.resolve('./data')
+const currentDir = path.dirname(fileURLToPath(import.meta.url))
+const dataDir = path.resolve(currentDir, '../data')
 const fakeDomainsPath = path.join(dataDir, 'fake_domains.json')
 const trustedBrandsPath = path.join(dataDir, 'trusted_brands.json')
 

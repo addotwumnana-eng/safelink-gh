@@ -1,10 +1,12 @@
 import express from 'express'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { readJsonFile, writeJsonFile } from '../utils/jsonStore.js'
 
 const router = express.Router()
-const reportsPath = path.resolve('./data/reports.json')
+const currentDir = path.dirname(fileURLToPath(import.meta.url))
+const reportsPath = path.resolve(currentDir, '../data/reports.json')
 
 router.post('/', async (req, res) => {
   try {
