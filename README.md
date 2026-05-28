@@ -1,87 +1,205 @@
-# SafeLink Ghana - Secure Escrow & Payment Platform
+# ScamShield Ghana MVP
 
-A modern, mobile-first React web application for trust-based escrow and payment services in Ghana.
+Low-cost anti-fraud app for Ghana that helps users:
 
-## Features
+1. Scan suspicious websites (Safe / Suspicious / Dangerous),
+2. Check if a mobile app looks official or fake,
+3. Report scam links/apps to improve local intelligence.
 
-- **Dashboard**: Trust Score (0–100, from deal history), Holding (Escrow) and Available balance, **Top up**, My Deals
-- **New Secure Deal**: Create escrow transactions with item name, price (GHS), seller MoMo; 1% service fee; insufficient-balance check
-- **SafeLink**: Generate and share links (Copy, WhatsApp, SMS); **View SafeLink** from My Deals for active deals
-- **My Deals**: **Confirm receipt**, **Cancel deal** (refund), status: Active / Completed / Cancelled
-- **MoMo Optimizer**: Calculate 1% service fee (Total, Net, Show details)
-- **Persistence**: Deals and balances saved in `localStorage` (survive refresh)
-- **Toasts**: “Deal created”, “Receipt confirmed”, “Link copied”, “Funds added”, “Deal cancelled. Funds returned.”
-- **Modern UI**: Dark theme with Ghana Gold (#FFD700) accent
-- **Animations**: Framer Motion transitions
+The project ships as a React app wrapped with Capacitor for Android (Google Play path), plus a lightweight Express backend.
 
-## Tech Stack
+---
 
-- React 18
-- Vite
-- Tailwind CSS
-- Framer Motion
-- Lucide React (Icons)
+## 1) Product spec (what we built now)
 
-## Getting Started
+### Core MVP features
 
-1. Install dependencies:
-```bash
-npm install
+- **URL Scanner**
+  - Input: URL
+  - Output: verdict, risk score (0-100), clear reasons
+  - Logic: blacklist match, suspicious TLDs, punycode, scam keywords, lookalike-brand checks
+
+- **App Authenticity Checker**
+  - Input: app name, package name, developer name
+  - Output: verdict, risk score, mismatch reasons
+  - Logic: compares with trusted local brand catalog
+
+- **Scam Report Submission**
+  - Users submit suspicious URL/app + context
+  - Reports stored for moderation and future blacklist updates
+
+### Monetization-ready positioning
+
+- Free tier: limited scans/day + report tools
+- Premium tier: unlimited scans, family protection, instant alerts
+- Extra: in-app ads (free tier), B2B dashboard later
+
+---
+
+## 2) Architecture
+
+### Frontend
+
+- React + Vite + Tailwind
+- Mobile-first UI
+- Capacitor wrapper for Android build
+
+### Backend
+
+- Node.js + Express
+- JSON file store (cheap MVP, no DB cost)
+- Risk engine for URL/app scoring
+
+### Data files
+
+- `backend/data/fake_domains.json` - known scam domains
+- `backend/data/trusted_brands.json` - verified brands/domains/packages
+- `backend/data/reports.json` - incoming user scam reports
+
+---
+
+## 3) API endpoints
+
+Base URL local backend: `http://localhost:3001`
+
+### URL scan
+
+`POST /api/scan/url`
+
+```json
+{
+  "url": "https://mtn-momo-security-check.xyz/login"
+}
 ```
 
-2. Start the development server:
+### App check
+
+`POST /api/scan/app`
+
+```json
+{
+  "appName": "MTN MoMo Wallet",
+  "packageName": "com.fake.mtn.wallet",
+  "developerName": "MTN Official Ltd"
+}
+```
+
+### Submit report
+
+`POST /api/reports`
+
+```json
+{
+  "type": "url",
+  "value": "https://phishing-example.top",
+  "description": "Asked for MoMo PIN",
+  "contact": "optional@email.com"
+}
+```
+
+### List reports (admin/dev use)
+
+`GET /api/reports`
+
+---
+
+## 4) Database schema (current JSON model)
+
+### Trusted brands
+
+```json
+{
+  "brand": "MTN MoMo",
+  "officialDomains": ["mtn.com.gh"],
+  "officialApps": [
+    {
+      "appName": "MyMTN",
+      "packageName": "com.mtnplayapp",
+      "developerName": "MTN"
+    }
+  ]
+}
+```
+
+### Scam report
+
+```json
+{
+  "id": "uuid",
+  "type": "url | app",
+  "value": "reported url or app identifier",
+  "description": "user context",
+  "contact": "optional",
+  "status": "new",
+  "createdAt": "ISO date"
+}
+```
+
+---
+
+## 5) Local setup
+
+### Frontend
+
 ```bash
+npm install
 npm run dev
 ```
 
-3. Open your browser and navigate to the local development URL (usually `http://localhost:5173`)
-
-## Project Structure
-
-```
-src/
-  ├── components/
-  │   ├── Dashboard.jsx          # Dashboard, balances, Top up, My Deals (View SafeLink, Confirm, Cancel)
-  │   ├── NewDealForm.jsx        # New secure deal form
-  │   ├── SafeLinkDisplay.jsx    # SafeLink view: copy, share WhatsApp/SMS
-  │   ├── MoMoOptimizer.jsx      # 1% fee calculator
-  │   └── Toast.jsx              # Toast notifications
-  ├── App.jsx                    # Main app, view state, deals & balance logic
-  ├── main.jsx                   # Entry point
-  └── index.css                  # Global styles
-```
-
-## Design
-
-- **Theme**: Dark with Ghana Gold (#FFD700) accents
-- **Layout**: Mobile-first, optimized for smartphone screens
-- **Icons**: Lucide React (Shield, Lock, CheckCircle)
-- **Animations**: Smooth transitions between screens using Framer Motion
-
-## Build
-
-To create a production build:
+### Backend
 
 ```bash
-npm run build
+cd backend
+npm install
+cp .env.example .env
+npm run dev
 ```
 
-To preview the production build:
+### Backend `.env.example`
 
-```bash
-npm run preview
-```
+- `PORT=3001`
+- `FRONTEND_URL=http://localhost:5173`
 
-## Production & Paystack callback (Android app)
+`VITE_API_BASE_URL` can be set in frontend environment for production.
 
-For the **mobile app**, Paystack redirects the user to your frontend after payment. That URL must be your **deployed** site so the in-app browser can load it and then close, returning the user to the app.
+---
 
-1. **Deploy the frontend** (e.g. Vercel, Netlify) and note the URL (e.g. `https://safelink-ghana.vercel.app`).
+## 6) Google Play launch checklist
 
-2. **Set backend `FRONTEND_URL`** to that URL in `backend/.env`:
-   ```env
-   FRONTEND_URL=https://your-deployed-app.vercel.app
-   ```
-   Do **not** use `http://localhost:5173` in production; the app’s return flow will not work.
+1. Add app icon + screenshots + privacy policy URL
+2. Keep permissions minimal (no SMS/call logs unless truly required)
+3. Add disclaimer: best-effort detection, no 100% guarantee
+4. Complete Play Data Safety form accurately
+5. Set support email and abuse-report process
+6. Publish internal test track first, then production rollout
 
-3. Restart the backend after changing `.env`. Paystack’s `callback_url` will be `https://your-deployed-app.vercel.app/payment/callback`, so the in-app browser loads your callback page, verifies the payment, and closes automatically back to the app.
+---
+
+## 7) Ghana compliance and trust basics
+
+- Comply with Ghana Data Protection Act (Act 843)
+- Store only minimum user data required
+- Provide delete-request contact for users
+- Keep moderation logs for scam report decisions
+
+---
+
+## 8) Next implementation steps
+
+1. Add Play Integrity + device attestation
+2. Add abuse rate-limiting and API keys
+3. Migrate JSON files to Postgres/Supabase
+4. Add paid subscriptions (Google Play Billing)
+5. Add automated phishing feeds and admin moderation panel
+
+---
+
+## 9) Suggested low-cost stack (production)
+
+- Frontend hosting: Vercel / Netlify
+- Backend hosting: Render / Railway / Cloud Run
+- Database: Supabase Postgres (free tier to start)
+- Analytics: Firebase Analytics
+- Crash reporting: Firebase Crashlytics
+
+This gets you to market fast without high infrastructure cost.
