@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import scanRouter from './routes/scan.js'
 import reportsRouter from './routes/reports.js'
+import subscriptionRouter from './routes/subscription.js'
 
 dotenv.config()
 
@@ -57,6 +58,7 @@ app.get('/api/test', (_req, res) => {
 
 app.use('/api/scan', scanRouter)
 app.use('/api/reports', reportsRouter)
+app.use('/api/subscription', subscriptionRouter)
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`)
