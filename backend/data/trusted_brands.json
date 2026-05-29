@@ -1,0 +1,57 @@
+[
+  {
+    "brand": "MTN MoMo",
+    "officialDomains": ["mtn.com.gh", "mtn.com", "momo.mtn.com"],
+    "officialApps": [
+      {
+        "appName": "MyMTN",
+        "packageName": "com.mtnplayapp",
+        "developerName": "MTN"
+      }
+    ]
+  },
+  {
+    "brand": "Telecel Cash",
+    "officialDomains": ["telecel.com.gh", "vodafone.com.gh"],
+    "officialApps": [
+      {
+        "appName": "Telecel Play",
+        "packageName": "com.vodafone.ghana.vodafone_ghana",
+        "developerName": "Vodafone Ghana"
+      }
+    ]
+  },
+  {
+    "brand": "AirtelTigo Money",
+    "officialDomains": ["airteltigo.com.gh"],
+    "officialApps": [
+      {
+        "appName": "AT Money",
+        "packageName": "com.airteltigo.atmoney",
+        "developerName": "AirtelTigo Ghana"
+      }
+    ]
+  },
+  {
+    "brand": "GCB Bank",
+    "officialDomains": ["gcbbank.com.gh"],
+    "officialApps": [
+      {
+        "appName": "GCB Mobile Banking",
+        "packageName": "com.gcb.gcbmobilebanking",
+        "developerName": "GCB Bank PLC"
+      }
+    ]
+  },
+  {
+    "brand": "Absa Bank Ghana",
+    "officialDomains": ["absa.com.gh"],
+    "officialApps": [
+      {
+        "appName": "Absa Banking",
+        "packageName": "com.absa.gh.mobile",
+        "developerName": "Absa Group Limited."
+      }
+    ]
+  }
+]
