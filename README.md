@@ -125,6 +125,28 @@ Base URL local backend: `http://localhost:3001`
 }
 ```
 
+### Initialize Paystack subscription payment
+
+`POST /api/subscription/paystack/initialize`
+
+```json
+{
+  "deviceId": "your-device-id",
+  "planId": "weekly",
+  "email": "you@example.com"
+}
+```
+
+### Verify Paystack subscription payment
+
+`POST /api/subscription/paystack/verify`
+
+```json
+{
+  "reference": "SUB-weekly-1234abcd"
+}
+```
+
 ---
 
 ## 4) Database schema (current JSON model)
@@ -183,8 +205,14 @@ npm run dev
 
 - `PORT=3001`
 - `FRONTEND_URL=http://localhost:5173`
+- `PAYSTACK_SECRET_KEY=sk_test_xxx`
+- `ALLOW_MANUAL_SUBSCRIPTION_ACTIVATION=false`
 
 `VITE_API_BASE_URL` can be set in frontend environment for production.
+
+If the app shows **"Failed to fetch"**, your frontend cannot reach backend:
+- ensure backend is running on `http://localhost:3001`
+- or set frontend `VITE_API_BASE_URL` to your deployed backend URL.
 
 ---
 

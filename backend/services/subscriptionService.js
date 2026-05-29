@@ -145,6 +145,15 @@ export function getSubscriptionPlans() {
   return buildAvailablePlans()
 }
 
+export function getPlanConfigById(planId) {
+  const normalizedPlanId = String(planId || '').trim().toLowerCase()
+  return planConfig[normalizedPlanId] || null
+}
+
+export function isPaidPlan(planId) {
+  return paidPlanIds.includes(String(planId || '').trim().toLowerCase())
+}
+
 export async function getSubscriptionStatus(deviceId) {
   const now = new Date()
   const dateKey = getTodayKey(now)

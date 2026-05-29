@@ -12,6 +12,7 @@ import { getApiBaseUrl } from './utils/apiBase'
 
 const API_BASE = getApiBaseUrl()
 const DEVICE_ID_KEY = 'scamshield_device_id'
+const PAYMENT_EMAIL_KEY = 'scamshield_payment_email'
 
 const tabs = [
   { id: 'url', label: 'Scan URL', icon: Globe },
@@ -61,11 +62,42 @@ function getOrCreateDeviceId() {
   }
 }
 
+function getSavedPaymentEmail() {
+  try {
+    return localStorage.getItem(PAYMENT_EMAIL_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
 function formatDate(value) {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleString()
+}
+
+function getFriendlyNetworkError(error) {
+  const raw = String(error?.message || '').toLowerCase()
+  if (raw.includes('failed to fetch') || raw.includes('networkerror')) {
+    return `Cannot reach backend (${API_BASE}). Start backend server or set VITE_API_BASE_URL correctly.`
+  }
+  return error?.message || 'Something went wrong. Try again.'
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options)
+  const contentType = response.headers.get('content-type') || ''
+
+  let payload
+  if (contentType.includes('application/json')) {
+    payload = await response.json()
+  } else {
+    const text = await response.text()
+    payload = { error: text || 'Unexpected response from server' }
+  }
+
+  return { response, payload }
 }
 
 function Badge({ verdict }) {
@@ -140,7 +172,7 @@ function UrlScanPanel({ deviceId, subscription, onSubscriptionChange, onUpgradeR
     setResult(null)
 
     try {
-      const response = await fetch(`${API_BASE}/api/scan/url`, {
+      const { response, payload } = await requestJson(`${API_BASE}/api/scan/url`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +181,6 @@ function UrlScanPanel({ deviceId, subscription, onSubscriptionChange, onUpgradeR
         body: JSON.stringify({ url, deviceId }),
       })
 
-      const payload = await response.json()
       if (payload.subscription) onSubscriptionChange(payload.subscription)
       if (!response.ok) {
         if (payload.code === 'FREE_LIMIT_REACHED') {
@@ -160,7 +191,7 @@ function UrlScanPanel({ deviceId, subscription, onSubscriptionChange, onUpgradeR
       }
       setResult(payload)
     } catch (scanError) {
-      setError(scanError.message || 'Could not scan URL')
+      setError(getFriendlyNetworkError(scanError))
     } finally {
       setLoading(false)
     }
@@ -216,7 +247,7 @@ function AppCheckPanel({ deviceId, subscription, onSubscriptionChange, onUpgrade
     setResult(null)
 
     try {
-      const response = await fetch(`${API_BASE}/api/scan/app`, {
+      const { response, payload } = await requestJson(`${API_BASE}/api/scan/app`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,7 +256,6 @@ function AppCheckPanel({ deviceId, subscription, onSubscriptionChange, onUpgrade
         body: JSON.stringify({ appName, packageName, developerName, deviceId }),
       })
 
-      const payload = await response.json()
       if (payload.subscription) onSubscriptionChange(payload.subscription)
       if (!response.ok) {
         if (payload.code === 'FREE_LIMIT_REACHED') {
@@ -236,7 +266,7 @@ function AppCheckPanel({ deviceId, subscription, onSubscriptionChange, onUpgrade
       }
       setResult(payload)
     } catch (checkError) {
-      setError(checkError.message || 'Could not verify app')
+      setError(getFriendlyNetworkError(checkError))
     } finally {
       setLoading(false)
     }
@@ -310,12 +340,11 @@ function ReportPanel() {
     setLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE}/api/reports`, {
+      const { response, payload } = await requestJson(`${API_BASE}/api/reports`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, value, description, contact }),
       })
-      const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Report failed')
 
       setStatus('Thanks. Report submitted for review.')
@@ -323,7 +352,7 @@ function ReportPanel() {
       setDescription('')
       setContact('')
     } catch (submitError) {
-      setError(submitError.message || 'Could not submit report')
+      setError(getFriendlyNetworkError(submitError))
     } finally {
       setLoading(false)
     }
@@ -379,7 +408,15 @@ function ReportPanel() {
   )
 }
 
-function PlansPanel({ subscription, loading, activatingPlanId, onActivatePlan }) {
+function PlansPanel({
+  subscription,
+  loading,
+  activatingPlanId,
+  onActivatePlan,
+  paymentEmail,
+  onPaymentEmailChange,
+  paystackConfigured,
+}) {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-gray-300">
@@ -395,6 +432,22 @@ function PlansPanel({ subscription, loading, activatingPlanId, onActivatePlan })
         )}
         {subscription?.expiresAt && (
           <p className="text-gray-400 mt-1">Expires: {formatDate(subscription.expiresAt)}</p>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
+        <label className="text-sm text-gray-300">Paystack payment email</label>
+        <input
+          type="email"
+          value={paymentEmail}
+          onChange={(event) => onPaymentEmailChange(event.target.value)}
+          placeholder="you@example.com"
+          className="mt-2 w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-ghana-gold"
+        />
+        {!paystackConfigured && (
+          <p className="text-xs text-amber-300 mt-2">
+            Paystack is not configured on backend yet. Add PAYSTACK_SECRET_KEY to backend `.env`.
+          </p>
         )}
       </div>
 
@@ -422,9 +475,9 @@ function PlansPanel({ subscription, loading, activatingPlanId, onActivatePlan })
               {isCurrent
                 ? 'Current plan'
                 : activatingPlanId === plan.id
-                  ? 'Activating...'
+                  ? 'Opening Paystack...'
                   : isPaidPlan
-                    ? `Activate ${plan.title}`
+                    ? `Pay with Paystack (${plan.price})`
                     : 'Default plan'}
             </button>
           </div>
@@ -440,52 +493,102 @@ function PlansPanel({ subscription, loading, activatingPlanId, onActivatePlan })
 function ScamShieldApp() {
   const [tab, setTab] = useState('url')
   const [deviceId] = useState(() => getOrCreateDeviceId())
+  const [paymentEmail, setPaymentEmail] = useState(() => getSavedPaymentEmail())
   const [subscription, setSubscription] = useState(null)
+  const [paystackConfigured, setPaystackConfigured] = useState(false)
   const [loadingSubscription, setLoadingSubscription] = useState(true)
   const [subscriptionError, setSubscriptionError] = useState('')
   const [activatingPlanId, setActivatingPlanId] = useState('')
+  const [paymentNotice, setPaymentNotice] = useState('')
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAYMENT_EMAIL_KEY, paymentEmail)
+    } catch {
+      // ignore storage errors
+    }
+  }, [paymentEmail])
 
   const loadSubscription = useCallback(async () => {
     setSubscriptionError('')
     setLoadingSubscription(true)
     try {
-      const response = await fetch(
+      const { response, payload } = await requestJson(
         `${API_BASE}/api/subscription/status?deviceId=${encodeURIComponent(deviceId)}`,
         { headers: { 'x-device-id': deviceId } }
       )
-      const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Failed to load subscription')
       setSubscription(payload.subscription)
+      setPaystackConfigured(Boolean(payload.paystackConfigured))
     } catch (error) {
-      setSubscriptionError(error.message || 'Failed to load subscription')
+      setSubscriptionError(getFriendlyNetworkError(error))
     } finally {
       setLoadingSubscription(false)
     }
   }, [deviceId])
 
-  useEffect(() => {
-    loadSubscription()
-  }, [loadSubscription])
-
-  const handleActivatePlan = async (planId) => {
-    setSubscriptionError('')
-    setActivatingPlanId(planId)
+  const verifyPaystackReference = useCallback(async (reference) => {
     try {
-      const response = await fetch(`${API_BASE}/api/subscription/activate`, {
+      setSubscriptionError('')
+      setPaymentNotice('Verifying Paystack payment...')
+      const { response, payload } = await requestJson(`${API_BASE}/api/subscription/paystack/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-device-id': deviceId,
         },
-        body: JSON.stringify({ deviceId, planId }),
+        body: JSON.stringify({ reference }),
       })
 
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Activation failed')
+      if (!response.ok) throw new Error(payload.error || 'Payment verification failed')
       setSubscription(payload.subscription)
+      setTab('subscription')
+      setPaymentNotice('Payment successful. Subscription activated.')
+      await loadSubscription()
     } catch (error) {
-      setSubscriptionError(error.message || 'Could not activate subscription')
-    } finally {
+      setPaymentNotice('')
+      setSubscriptionError(getFriendlyNetworkError(error))
+    }
+  }, [deviceId, loadSubscription])
+
+  useEffect(() => {
+    loadSubscription()
+  }, [loadSubscription])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const reference = searchParams.get('reference') || searchParams.get('trxref')
+    if (!reference) return
+
+    verifyPaystackReference(reference)
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [verifyPaystackReference])
+
+  const handleActivatePlan = async (planId) => {
+    setSubscriptionError('')
+    setPaymentNotice('')
+    if (!paymentEmail || !paymentEmail.includes('@')) {
+      setSubscriptionError('Enter a valid payment email before continuing to Paystack.')
+      return
+    }
+
+    setActivatingPlanId(planId)
+    try {
+      const { response, payload } = await requestJson(`${API_BASE}/api/subscription/paystack/initialize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ deviceId, planId, email: paymentEmail }),
+      })
+
+      if (!response.ok) throw new Error(payload.error || 'Could not start Paystack payment')
+      if (!payload.authorizationUrl) throw new Error('No Paystack authorization URL returned')
+
+      window.location.assign(payload.authorizationUrl)
+    } catch (error) {
+      setSubscriptionError(getFriendlyNetworkError(error))
       setActivatingPlanId('')
     }
   }
@@ -528,6 +631,9 @@ function ScamShieldApp() {
         loading={loadingSubscription}
         activatingPlanId={activatingPlanId}
         onActivatePlan={handleActivatePlan}
+        paymentEmail={paymentEmail}
+        onPaymentEmailChange={setPaymentEmail}
+        paystackConfigured={paystackConfigured}
       />
     )
   }, [
@@ -535,6 +641,8 @@ function ScamShieldApp() {
     deviceId,
     handleSubscriptionChange,
     loadingSubscription,
+    paymentEmail,
+    paystackConfigured,
     subscription,
     tab,
   ])
@@ -567,9 +675,7 @@ function ScamShieldApp() {
           {subscription && (
             <div className="mt-3 text-xs text-gray-400">
               Plan:{' '}
-              <span className="text-ghana-gold font-semibold">
-                {subscription.planLabel}
-              </span>
+              <span className="text-ghana-gold font-semibold">{subscription.planLabel}</span>
               {!subscription.unlimited && (
                 <span className="ml-2">
                   ({subscription.scansRemainingToday}/{subscription.todayLimit} scans left today)
@@ -577,6 +683,7 @@ function ScamShieldApp() {
               )}
             </div>
           )}
+          {paymentNotice && <p className="mt-2 text-xs text-emerald-300">{paymentNotice}</p>}
           {subscriptionError && <p className="mt-2 text-xs text-red-300">{subscriptionError}</p>}
         </header>
 
