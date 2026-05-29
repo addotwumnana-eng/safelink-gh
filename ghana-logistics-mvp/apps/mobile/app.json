@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "CarryGO",
+    "slug": "carrygo",
+    "scheme": "carrygo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CarryGO needs access to your photos to upload driver documents.",
+          "cameraPermission": "CarryGO needs camera access for selfie verification."
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.carrygo.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    }
+  }
+}
