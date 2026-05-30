@@ -1,5 +1,6 @@
 import express from 'express'
 import {
+  activateSubscriptionFromGooglePlay,
   activateSubscriptionPlan,
   getPlanConfigById,
   getSubscriptionPlans,
@@ -25,10 +26,26 @@ function isManualActivationAllowed() {
   return String(process.env.ALLOW_MANUAL_SUBSCRIPTION_ACTIVATION || '').toLowerCase() === 'true'
 }
 
+function getGooglePlayConfig() {
+  const weeklyProductId = String(process.env.PLAY_BILLING_WEEKLY_PRODUCT_ID || '').trim()
+  const weeklyPlanId = String(process.env.PLAY_BILLING_WEEKLY_PLAN_ID || '').trim()
+  const monthlyProductId = String(process.env.PLAY_BILLING_MONTHLY_PRODUCT_ID || '').trim()
+  const monthlyPlanId = String(process.env.PLAY_BILLING_MONTHLY_PLAN_ID || '').trim()
+
+  return {
+    weeklyProductId,
+    weeklyPlanId,
+    monthlyProductId,
+    monthlyPlanId,
+    isConfigured: Boolean(weeklyProductId && weeklyPlanId && monthlyProductId && monthlyPlanId),
+  }
+}
+
 router.get('/plans', (_req, res) => {
   return res.json({
     plans: getSubscriptionPlans(),
     paystackConfigured: isPaystackConfigured(),
+    googlePlay: getGooglePlayConfig(),
   })
 })
 
@@ -42,6 +59,7 @@ router.get('/status', async (req, res) => {
       deviceId,
       subscription,
       paystackConfigured: isPaystackConfigured(),
+      googlePlay: getGooglePlayConfig(),
     })
   } catch (error) {
     console.error('Subscription status failed:', error)
@@ -176,6 +194,68 @@ router.post('/paystack/verify', async (req, res) => {
     console.error('Paystack verify failed:', error)
     return res.status(500).json({
       error: error?.message || 'Unable to verify Paystack payment',
+    })
+  }
+})
+
+router.post('/google-play/activate', async (req, res) => {
+  try {
+    const deviceId = getDeviceId(req)
+    if (!deviceId) return res.status(400).json({ error: 'deviceId is required' })
+
+    const planId = String(req.body?.planId || req.body?.plan || '').trim().toLowerCase()
+    if (!isPaidPlan(planId)) {
+      return res.status(400).json({ error: 'planId must be weekly or monthly' })
+    }
+
+    const transaction = req.body?.transaction || {}
+    const purchaseToken = String(transaction.purchaseToken || req.body?.purchaseToken || '').trim()
+    const productIdentifier = String(
+      transaction.productIdentifier || req.body?.productIdentifier || ''
+    ).trim()
+    const transactionId = String(transaction.transactionId || req.body?.transactionId || '').trim()
+    const purchaseDate = String(transaction.purchaseDate || req.body?.purchaseDate || '').trim()
+    const purchaseState = String(transaction.purchaseState || req.body?.purchaseState || '').trim()
+
+    if (!purchaseToken) {
+      return res.status(400).json({ error: 'purchaseToken is required from Google Play transaction' })
+    }
+
+    if (purchaseState && purchaseState !== '1' && purchaseState.toUpperCase() !== 'PURCHASED') {
+      return res.status(400).json({
+        error: 'Google Play transaction is not in purchased state',
+      })
+    }
+
+    const playConfig = getGooglePlayConfig()
+    const expectedProductId = planId === 'weekly' ? playConfig.weeklyProductId : playConfig.monthlyProductId
+    if (expectedProductId && productIdentifier && productIdentifier !== expectedProductId) {
+      return res.status(400).json({
+        error: `Product mismatch for ${planId} plan`,
+      })
+    }
+
+    const activation = await activateSubscriptionFromGooglePlay({
+      deviceId,
+      planId,
+      purchaseToken,
+      productIdentifier,
+      transactionId,
+      purchaseDate,
+    })
+
+    return res.json({
+      deviceId,
+      subscription: activation.subscription,
+      wasAlreadyProcessed: activation.wasAlreadyProcessed,
+      message: activation.wasAlreadyProcessed
+        ? 'Google Play purchase was already processed for this device.'
+        : `${activation.subscription.planLabel} activated with Google Play purchase.`,
+    })
+  } catch (error) {
+    console.error('Google Play activation failed:', error)
+    return res.status(500).json({
+      error: error?.message || 'Unable to activate Google Play subscription right now',
     })
   }
 })

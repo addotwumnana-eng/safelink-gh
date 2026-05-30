@@ -4,6 +4,7 @@ import { readJsonFile, writeJsonFile } from '../utils/jsonStore.js'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const subscriptionsPath = path.resolve(currentDir, '../data/subscriptions.json')
+const googlePlayPurchasesPath = path.resolve(currentDir, '../data/google_play_purchases.json')
 
 const FREE_LIMIT_PER_DAY = 1
 
@@ -130,6 +131,14 @@ async function saveStore(store) {
   await writeJsonFile(subscriptionsPath, store)
 }
 
+async function loadGooglePlayPurchasesStore() {
+  return readJsonFile(googlePlayPurchasesPath, { tokens: {} })
+}
+
+async function saveGooglePlayPurchasesStore(store) {
+  await writeJsonFile(googlePlayPurchasesPath, store)
+}
+
 function buildAvailablePlans() {
   return Object.values(planConfig).map((plan) => ({
     id: plan.id,
@@ -182,7 +191,13 @@ export async function activateSubscriptionPlan(deviceId, planId) {
   const now = new Date()
   const store = await loadStore()
   const plan = planConfig[normalizedPlanId]
-  const expiresAt = new Date(now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000)
+  const existingRecord = normalizeUserRecord(store.users[deviceId], now)
+  const existingExpiry =
+    existingRecord.expiresAt && !Number.isNaN(new Date(existingRecord.expiresAt).getTime())
+      ? new Date(existingRecord.expiresAt)
+      : null
+  const baseDate = existingExpiry && existingExpiry > now ? existingExpiry : now
+  const expiresAt = new Date(baseDate.getTime() + plan.durationDays * 24 * 60 * 60 * 1000)
 
   store.users[deviceId] = {
     planId: normalizedPlanId,
@@ -228,5 +243,62 @@ export async function consumeScanAllowance(deviceId, scanType) {
   return {
     allowed: true,
     subscription: summarizeSubscription(userRecord, usageToday),
+  }
+}
+
+export async function activateSubscriptionFromGooglePlay({
+  deviceId,
+  planId,
+  purchaseToken,
+  productIdentifier,
+  transactionId,
+  purchaseDate,
+}) {
+  const normalizedPlanId = String(planId || '').trim().toLowerCase()
+  if (!paidPlanIds.includes(normalizedPlanId)) {
+    throw new Error('plan must be weekly or monthly')
+  }
+
+  const token = String(purchaseToken || '').trim()
+  if (!token) {
+    throw new Error('purchaseToken is required')
+  }
+
+  const store = await loadGooglePlayPurchasesStore()
+  const tokens = toSafeObject(store.tokens)
+  const existingTokenRecord = tokens[token]
+
+  if (existingTokenRecord) {
+    if (existingTokenRecord.deviceId !== deviceId) {
+      throw new Error('This Google Play purchase token is already linked to another device.')
+    }
+
+    const subscription = await getSubscriptionStatus(deviceId)
+    return {
+      subscription,
+      wasAlreadyProcessed: true,
+      tokenRecord: existingTokenRecord,
+    }
+  }
+
+  const subscription = await activateSubscriptionPlan(deviceId, normalizedPlanId)
+
+  const tokenRecord = {
+    deviceId,
+    planId: normalizedPlanId,
+    productIdentifier: String(productIdentifier || '').trim(),
+    transactionId: String(transactionId || '').trim(),
+    purchaseDate: String(purchaseDate || '').trim(),
+    activatedAt: new Date().toISOString(),
+  }
+
+  tokens[token] = tokenRecord
+  store.tokens = tokens
+  await saveGooglePlayPurchasesStore(store)
+
+  return {
+    subscription,
+    wasAlreadyProcessed: false,
+    tokenRecord,
   }
 }

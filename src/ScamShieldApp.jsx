@@ -9,6 +9,13 @@ import {
   Smartphone,
 } from 'lucide-react'
 import { getApiBaseUrl } from './utils/apiBase'
+import {
+  hasCompletePlayBillingConfig,
+  isAndroidNativePlatform,
+  isPlayBillingSupported,
+  loadPlayBillingProducts,
+  purchasePlanWithGooglePlay,
+} from './utils/googlePlayBilling'
 
 const API_BASE = getApiBaseUrl()
 const DEVICE_ID_KEY = 'scamshield_device_id'
@@ -83,6 +90,21 @@ function getFriendlyNetworkError(error) {
     return `Cannot reach backend (${API_BASE}). Start backend server or set VITE_API_BASE_URL correctly.`
   }
   return error?.message || 'Something went wrong. Try again.'
+}
+
+function getFriendlyPurchaseError(error) {
+  const message = String(error?.message || '')
+  const lower = message.toLowerCase()
+
+  if (lower.includes('cancel')) {
+    return 'Purchase cancelled.'
+  }
+
+  if (lower.includes('billing') && lower.includes('support')) {
+    return 'Google Play Billing is not available on this device.'
+  }
+
+  return getFriendlyNetworkError(error)
 }
 
 async function requestJson(url, options = {}) {
@@ -416,6 +438,10 @@ function PlansPanel({
   paymentEmail,
   onPaymentEmailChange,
   paystackConfigured,
+  usingGooglePlay,
+  playBillingAvailable,
+  playBillingConfigured,
+  playProductsByPlan,
 }) {
   return (
     <div className="space-y-3">
@@ -435,25 +461,45 @@ function PlansPanel({
         )}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
-        <label className="text-sm text-gray-300">Paystack payment email</label>
-        <input
-          type="email"
-          value={paymentEmail}
-          onChange={(event) => onPaymentEmailChange(event.target.value)}
-          placeholder="you@example.com"
-          className="mt-2 w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-ghana-gold"
-        />
-        {!paystackConfigured && (
-          <p className="text-xs text-amber-300 mt-2">
-            Paystack is not configured on backend yet. Add PAYSTACK_SECRET_KEY to backend `.env`.
-          </p>
-        )}
-      </div>
+      {usingGooglePlay ? (
+        <div className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
+          <p className="text-sm text-gray-300 font-medium">Google Play Billing checkout enabled.</p>
+          {!playBillingConfigured && (
+            <p className="text-xs text-amber-300 mt-2">
+              Missing Play Billing product/base plan IDs. Set VITE_PLAY_BILLING_* vars and rebuild.
+            </p>
+          )}
+          {!playBillingAvailable && (
+            <p className="text-xs text-amber-300 mt-2">
+              Google Play Billing not available on this device yet.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
+          <label className="text-sm text-gray-300">Paystack payment email</label>
+          <input
+            type="email"
+            value={paymentEmail}
+            onChange={(event) => onPaymentEmailChange(event.target.value)}
+            placeholder="you@example.com"
+            className="mt-2 w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-ghana-gold"
+          />
+          {!paystackConfigured && (
+            <p className="text-xs text-amber-300 mt-2">
+              Paystack is not configured on backend yet. Add PAYSTACK_SECRET_KEY to backend `.env`.
+            </p>
+          )}
+        </div>
+      )}
 
       {planCards.map((plan) => {
         const isCurrent = subscription?.planId === plan.id
         const isPaidPlan = plan.id !== 'free'
+        const storeProduct = playProductsByPlan?.[plan.id]
+        const dynamicPrice = usingGooglePlay && storeProduct?.priceString ? storeProduct.priceString : plan.price
+        const canStartGooglePlayPurchase = usingGooglePlay && playBillingConfigured && playBillingAvailable
+        const disablePaidAction = usingGooglePlay ? !canStartGooglePlayPurchase : !paystackConfigured
         return (
           <div key={plan.id} className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
             <div className="flex items-start justify-between gap-2">
@@ -462,22 +508,24 @@ function PlansPanel({
                 <p className="text-sm text-gray-400">{plan.detail}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-ghana-gold">{plan.price}</p>
+                <p className="font-bold text-ghana-gold">{dynamicPrice}</p>
                 <p className="text-xs text-gray-400">{plan.subtitle}</p>
               </div>
             </div>
             <button
               type="button"
-              disabled={!isPaidPlan || isCurrent || loading || activatingPlanId === plan.id}
+              disabled={!isPaidPlan || isCurrent || loading || activatingPlanId === plan.id || disablePaidAction}
               onClick={() => onActivatePlan(plan.id)}
               className="mt-3 w-full rounded-xl bg-ghana-gold text-black font-semibold py-2.5 disabled:opacity-55"
             >
               {isCurrent
                 ? 'Current plan'
                 : activatingPlanId === plan.id
-                  ? 'Opening Paystack...'
+                  ? usingGooglePlay ? 'Opening Google Play...' : 'Opening Paystack...'
                   : isPaidPlan
-                    ? `Pay with Paystack (${plan.price})`
+                    ? usingGooglePlay
+                      ? 'Pay with Google Play'
+                      : `Pay with Paystack (${plan.price})`
                     : 'Default plan'}
             </button>
           </div>
@@ -493,13 +541,19 @@ function PlansPanel({
 function ScamShieldApp() {
   const [tab, setTab] = useState('url')
   const [deviceId] = useState(() => getOrCreateDeviceId())
+  const [isAndroidNative] = useState(() => isAndroidNativePlatform())
   const [paymentEmail, setPaymentEmail] = useState(() => getSavedPaymentEmail())
   const [subscription, setSubscription] = useState(null)
   const [paystackConfigured, setPaystackConfigured] = useState(false)
+  const [playBillingAvailable, setPlayBillingAvailable] = useState(false)
+  const [playProductsByPlan, setPlayProductsByPlan] = useState({})
   const [loadingSubscription, setLoadingSubscription] = useState(true)
   const [subscriptionError, setSubscriptionError] = useState('')
   const [activatingPlanId, setActivatingPlanId] = useState('')
   const [paymentNotice, setPaymentNotice] = useState('')
+  const [billingNotice, setBillingNotice] = useState('')
+  const playBillingConfigured = hasCompletePlayBillingConfig()
+  const usingGooglePlay = isAndroidNative
 
   useEffect(() => {
     try {
@@ -508,6 +562,45 @@ function ScamShieldApp() {
       // ignore storage errors
     }
   }, [paymentEmail])
+
+  useEffect(() => {
+    const initGooglePlay = async () => {
+      if (!usingGooglePlay) return
+
+      try {
+        const billingSupport = await isPlayBillingSupported()
+        setPlayBillingAvailable(billingSupport.supported)
+        if (!billingSupport.supported) {
+          setBillingNotice(billingSupport.reason || 'Google Play Billing is not available.')
+          return
+        }
+
+        if (!playBillingConfigured) {
+          setBillingNotice('Google Play Billing IDs are missing from VITE_PLAY_BILLING_* environment variables.')
+          return
+        }
+
+        const products = await loadPlayBillingProducts()
+        const nextByPlan = {}
+
+        for (const product of products) {
+          if (product.planIdentifier === import.meta.env.VITE_PLAY_BILLING_WEEKLY_PRODUCT_ID) {
+            nextByPlan.weekly = product
+          }
+          if (product.planIdentifier === import.meta.env.VITE_PLAY_BILLING_MONTHLY_PRODUCT_ID) {
+            nextByPlan.monthly = product
+          }
+        }
+
+        setPlayProductsByPlan(nextByPlan)
+        setBillingNotice('')
+      } catch (error) {
+        setBillingNotice(getFriendlyPurchaseError(error))
+      }
+    }
+
+    initGooglePlay()
+  }, [playBillingConfigured, usingGooglePlay])
 
   const loadSubscription = useCallback(async () => {
     setSubscriptionError('')
@@ -567,12 +660,42 @@ function ScamShieldApp() {
   const handleActivatePlan = async (planId) => {
     setSubscriptionError('')
     setPaymentNotice('')
-    if (!paymentEmail || !paymentEmail.includes('@')) {
-      setSubscriptionError('Enter a valid payment email before continuing to Paystack.')
+    setActivatingPlanId(planId)
+    if (usingGooglePlay) {
+      try {
+        const transaction = await purchasePlanWithGooglePlay({
+          planId,
+          appAccountToken: deviceId,
+        })
+
+        const { response, payload } = await requestJson(`${API_BASE}/api/subscription/google-play/activate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-device-id': deviceId,
+          },
+          body: JSON.stringify({ deviceId, planId, transaction }),
+        })
+
+        if (!response.ok) throw new Error(payload.error || 'Could not activate Google Play subscription')
+        setSubscription(payload.subscription)
+        setPaymentNotice(payload.message || 'Google Play subscription activated.')
+        setTab('subscription')
+      } catch (error) {
+        setSubscriptionError(getFriendlyPurchaseError(error))
+      } finally {
+        setActivatingPlanId('')
+      }
+
       return
     }
 
-    setActivatingPlanId(planId)
+    if (!paymentEmail || !paymentEmail.includes('@')) {
+      setSubscriptionError('Enter a valid payment email before continuing to Paystack.')
+      setActivatingPlanId('')
+      return
+    }
+
     try {
       const { response, payload } = await requestJson(`${API_BASE}/api/subscription/paystack/initialize`, {
         method: 'POST',
@@ -634,6 +757,10 @@ function ScamShieldApp() {
         paymentEmail={paymentEmail}
         onPaymentEmailChange={setPaymentEmail}
         paystackConfigured={paystackConfigured}
+        usingGooglePlay={usingGooglePlay}
+        playBillingAvailable={playBillingAvailable}
+        playBillingConfigured={playBillingConfigured}
+        playProductsByPlan={playProductsByPlan}
       />
     )
   }, [
@@ -643,8 +770,12 @@ function ScamShieldApp() {
     loadingSubscription,
     paymentEmail,
     paystackConfigured,
+    playBillingAvailable,
+    playBillingConfigured,
+    playProductsByPlan,
     subscription,
     tab,
+    usingGooglePlay,
   ])
 
   return (
@@ -684,6 +815,7 @@ function ScamShieldApp() {
             </div>
           )}
           {paymentNotice && <p className="mt-2 text-xs text-emerald-300">{paymentNotice}</p>}
+          {billingNotice && <p className="mt-2 text-xs text-amber-300">{billingNotice}</p>}
           {subscriptionError && <p className="mt-2 text-xs text-red-300">{subscriptionError}</p>}
         </header>
 

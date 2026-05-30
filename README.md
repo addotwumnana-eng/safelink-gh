@@ -62,6 +62,7 @@ The project ships as a React app wrapped with Capacitor for Android (Google Play
 - `backend/data/trusted_brands.json` - verified brands/domains/packages
 - `backend/data/reports.json` - incoming user scam reports
 - `backend/data/subscriptions.json` - device plans and daily scan usage
+- `backend/data/google_play_purchases.json` - processed Google Play purchase tokens
 
 ---
 
@@ -147,6 +148,23 @@ Base URL local backend: `http://localhost:3001`
 }
 ```
 
+### Activate subscription from Google Play purchase
+
+`POST /api/subscription/google-play/activate`
+
+```json
+{
+  "deviceId": "your-device-id",
+  "planId": "weekly",
+  "transaction": {
+    "transactionId": "GPA.1234-5678-9012-34567",
+    "productIdentifier": "com.addo.safelinkghana.weekly_unlimited",
+    "purchaseToken": "purchase-token-from-play",
+    "purchaseState": "1"
+  }
+}
+```
+
 ---
 
 ## 4) Database schema (current JSON model)
@@ -207,8 +225,21 @@ npm run dev
 - `FRONTEND_URL=http://localhost:5173`
 - `PAYSTACK_SECRET_KEY=sk_test_xxx`
 - `ALLOW_MANUAL_SUBSCRIPTION_ACTIVATION=false`
+- `PLAY_BILLING_WEEKLY_PRODUCT_ID=com.addo.safelinkghana.weekly_unlimited`
+- `PLAY_BILLING_WEEKLY_PLAN_ID=weekly-plan`
+- `PLAY_BILLING_MONTHLY_PRODUCT_ID=com.addo.safelinkghana.monthly_unlimited`
+- `PLAY_BILLING_MONTHLY_PLAN_ID=monthly-plan`
 
 `VITE_API_BASE_URL` can be set in frontend environment for production.
+
+For Google Play Billing in frontend (`.env.local` or `.env.production`), set:
+
+```env
+VITE_PLAY_BILLING_WEEKLY_PRODUCT_ID=com.addo.safelinkghana.weekly_unlimited
+VITE_PLAY_BILLING_WEEKLY_PLAN_ID=weekly-plan
+VITE_PLAY_BILLING_MONTHLY_PRODUCT_ID=com.addo.safelinkghana.monthly_unlimited
+VITE_PLAY_BILLING_MONTHLY_PLAN_ID=monthly-plan
+```
 
 If the app shows **"Failed to fetch"**, your frontend cannot reach backend:
 - ensure backend is running on `http://localhost:3001`
