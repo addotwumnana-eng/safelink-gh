@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { analyzeWebsite, analyzeAppIdentity } from '../services/riskEngine.js'
 import { readJsonFile } from '../utils/jsonStore.js'
+import { consumeScanAllowance } from '../services/subscriptionService.js'
 
 const router = express.Router()
 
@@ -20,17 +21,35 @@ async function loadRiskData() {
   return { blockedDomains, trustedBrands }
 }
 
+function getDeviceId(req) {
+  const fromBody = String(req.body?.deviceId || '').trim()
+  const fromHeader = String(req.headers['x-device-id'] || '').trim()
+  return fromBody || fromHeader
+}
+
 router.post('/url', async (req, res) => {
   try {
     const url = String(req.body?.url || '').trim()
     if (!url) return res.status(400).json({ error: 'url is required' })
+    const deviceId = getDeviceId(req)
+    if (!deviceId) return res.status(400).json({ error: 'deviceId is required' })
+
+    const allowance = await consumeScanAllowance(deviceId, 'url')
+    if (!allowance.allowed) {
+      return res.status(402).json({
+        error: 'Free plan limit reached. Upgrade to weekly or monthly unlimited.',
+        code: 'FREE_LIMIT_REACHED',
+        subscription: allowance.subscription,
+      })
+    }
 
     const { blockedDomains, trustedBrands } = await loadRiskData()
     const result = analyzeWebsite(url, { blockedDomains, trustedBrands })
 
     return res.json({
-      input: { url },
+      input: { url, deviceId },
       ...result,
+      subscription: allowance.subscription,
     })
   } catch (error) {
     console.error('URL scan failed:', error)
@@ -40,10 +59,23 @@ router.post('/url', async (req, res) => {
 
 router.post('/app', async (req, res) => {
   try {
+    const deviceId = getDeviceId(req)
+    if (!deviceId) return res.status(400).json({ error: 'deviceId is required' })
+
+    const allowance = await consumeScanAllowance(deviceId, 'app')
+    if (!allowance.allowed) {
+      return res.status(402).json({
+        error: 'Free plan limit reached. Upgrade to weekly or monthly unlimited.',
+        code: 'FREE_LIMIT_REACHED',
+        subscription: allowance.subscription,
+      })
+    }
+
     const payload = {
       appName: req.body?.appName,
       packageName: req.body?.packageName,
       developerName: req.body?.developerName,
+      deviceId,
     }
 
     const { trustedBrands } = await loadRiskData()
@@ -52,6 +84,7 @@ router.post('/app', async (req, res) => {
     return res.json({
       input: payload,
       ...result,
+      subscription: allowance.subscription,
     })
   } catch (error) {
     console.error('App scan failed:', error)

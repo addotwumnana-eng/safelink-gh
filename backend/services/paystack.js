@@ -31,9 +31,19 @@ function getPaystackClient() {
  * For production / mobile app: set FRONTEND_URL in .env to your deployed frontend URL
  * (e.g. https://safelink-ghana.vercel.app) so Paystack redirects there and the app return flow works.
  */
-export async function initializePayment({ email, amount, reference, metadata = {} }) {
+export async function initializePayment({
+  email,
+  amount,
+  reference,
+  metadata = {},
+  callbackPath = '/payment/callback',
+  callbackUrl,
+}) {
   const paystack = getPaystackClient()
   const koboAmount = Math.round(amount * 100)
+  const resolvedCallbackUrl =
+    callbackUrl ||
+    `${process.env.FRONTEND_URL || 'http://localhost:5173'}${callbackPath}`
 
   const response = await paystack.transaction.initialize({
     email,
@@ -41,7 +51,7 @@ export async function initializePayment({ email, amount, reference, metadata = {
     reference,
     metadata,
     currency: 'GHS',
-    callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/callback`,
+    callback_url: resolvedCallbackUrl,
   })
 
   return response

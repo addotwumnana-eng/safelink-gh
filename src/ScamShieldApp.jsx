@@ -1,14 +1,126 @@
-import { useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Globe, ShieldAlert, Smartphone, Send } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Crown,
+  Globe,
+  Send,
+  ShieldAlert,
+  Smartphone,
+} from 'lucide-react'
 import { getApiBaseUrl } from './utils/apiBase'
+import {
+  hasCompletePlayBillingConfig,
+  isAndroidNativePlatform,
+  isPlayBillingSupported,
+  loadPlayBillingProducts,
+  purchasePlanWithGooglePlay,
+} from './utils/googlePlayBilling'
 
 const API_BASE = getApiBaseUrl()
+const DEVICE_ID_KEY = 'scamshield_device_id'
+const PAYMENT_EMAIL_KEY = 'scamshield_payment_email'
 
 const tabs = [
   { id: 'url', label: 'Scan URL', icon: Globe },
   { id: 'app', label: 'Check App', icon: Smartphone },
   { id: 'report', label: 'Report Scam', icon: ShieldAlert },
+  { id: 'subscription', label: 'Plans', icon: Crown },
 ]
+
+const planCards = [
+  {
+    id: 'free',
+    title: 'Freemium',
+    price: 'GHS 0',
+    subtitle: '1 scan/day',
+    detail: 'Basic scam detection with one check daily.',
+  },
+  {
+    id: 'weekly',
+    title: 'Weekly Unlimited',
+    price: 'GHS 5',
+    subtitle: 'per week',
+    detail: 'Unlimited URL and app checks for seven days.',
+  },
+  {
+    id: 'monthly',
+    title: 'Monthly Unlimited',
+    price: 'GHS 15',
+    subtitle: 'per month',
+    detail: 'Unlimited checks for 30 days at the lowest price.',
+  },
+]
+
+function getOrCreateDeviceId() {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY)
+    if (existing) return existing
+
+    const generated =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+    localStorage.setItem(DEVICE_ID_KEY, generated)
+    return generated
+  } catch {
+    return 'device-fallback'
+  }
+}
+
+function getSavedPaymentEmail() {
+  try {
+    return localStorage.getItem(PAYMENT_EMAIL_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString()
+}
+
+function getFriendlyNetworkError(error) {
+  const raw = String(error?.message || '').toLowerCase()
+  if (raw.includes('failed to fetch') || raw.includes('networkerror')) {
+    return `Cannot reach backend (${API_BASE}). Start backend server or set VITE_API_BASE_URL correctly.`
+  }
+  return error?.message || 'Something went wrong. Try again.'
+}
+
+function getFriendlyPurchaseError(error) {
+  const message = String(error?.message || '')
+  const lower = message.toLowerCase()
+
+  if (lower.includes('cancel')) {
+    return 'Purchase cancelled.'
+  }
+
+  if (lower.includes('billing') && lower.includes('support')) {
+    return 'Google Play Billing is not available on this device.'
+  }
+
+  return getFriendlyNetworkError(error)
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options)
+  const contentType = response.headers.get('content-type') || ''
+
+  let payload
+  if (contentType.includes('application/json')) {
+    payload = await response.json()
+  } else {
+    const text = await response.text()
+    payload = { error: text || 'Unexpected response from server' }
+  }
+
+  return { response, payload }
+}
 
 function Badge({ verdict }) {
   const mapping = {
@@ -47,7 +159,29 @@ function ResultCard({ title, result }) {
   )
 }
 
-function UrlScanPanel() {
+function SubscriptionSummary({ subscription }) {
+  if (!subscription) return null
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
+      <p className="text-gray-300">
+        Plan: <span className="font-bold text-ghana-gold">{subscription.planLabel}</span>
+      </p>
+      {subscription.unlimited ? (
+        <p className="text-emerald-300 mt-1">Unlimited scans active</p>
+      ) : (
+        <p className="text-amber-300 mt-1">
+          Remaining today: {subscription.scansRemainingToday}/{subscription.todayLimit}
+        </p>
+      )}
+      {subscription.expiresAt && (
+        <p className="text-gray-400 mt-1">Expires: {formatDate(subscription.expiresAt)}</p>
+      )}
+    </div>
+  )
+}
+
+function UrlScanPanel({ deviceId, subscription, onSubscriptionChange, onUpgradeRequest }) {
   const [url, setUrl] = useState('')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -60,17 +194,26 @@ function UrlScanPanel() {
     setResult(null)
 
     try {
-      const response = await fetch(`${API_BASE}/api/scan/url`, {
+      const { response, payload } = await requestJson(`${API_BASE}/api/scan/url`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ url, deviceId }),
       })
 
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Scan failed')
+      if (payload.subscription) onSubscriptionChange(payload.subscription)
+      if (!response.ok) {
+        if (payload.code === 'FREE_LIMIT_REACHED') {
+          setError('Daily free scan finished. Upgrade to weekly/monthly for unlimited checks.')
+          return
+        }
+        throw new Error(payload.error || 'Scan failed')
+      }
       setResult(payload)
     } catch (scanError) {
-      setError(scanError.message || 'Could not scan URL')
+      setError(getFriendlyNetworkError(scanError))
     } finally {
       setLoading(false)
     }
@@ -78,6 +221,7 @@ function UrlScanPanel() {
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <SubscriptionSummary subscription={subscription} />
       <label className="text-sm text-gray-300">Paste website URL</label>
       <input
         value={url}
@@ -91,13 +235,26 @@ function UrlScanPanel() {
       >
         {loading ? 'Scanning...' : 'Scan URL'}
       </button>
-      {error && <p className="text-red-300 text-sm">{error}</p>}
+      {error && (
+        <div className="text-sm text-red-300">
+          <p>{error}</p>
+          {subscription && !subscription.unlimited && (
+            <button
+              type="button"
+              onClick={onUpgradeRequest}
+              className="mt-2 text-ghana-gold font-semibold hover:underline"
+            >
+              Upgrade now
+            </button>
+          )}
+        </div>
+      )}
       <ResultCard title="URL analysis" result={result} />
     </form>
   )
 }
 
-function AppCheckPanel() {
+function AppCheckPanel({ deviceId, subscription, onSubscriptionChange, onUpgradeRequest }) {
   const [appName, setAppName] = useState('')
   const [packageName, setPackageName] = useState('')
   const [developerName, setDeveloperName] = useState('')
@@ -112,17 +269,26 @@ function AppCheckPanel() {
     setResult(null)
 
     try {
-      const response = await fetch(`${API_BASE}/api/scan/app`, {
+      const { response, payload } = await requestJson(`${API_BASE}/api/scan/app`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appName, packageName, developerName }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ appName, packageName, developerName, deviceId }),
       })
 
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Check failed')
+      if (payload.subscription) onSubscriptionChange(payload.subscription)
+      if (!response.ok) {
+        if (payload.code === 'FREE_LIMIT_REACHED') {
+          setError('Daily free scan finished. Upgrade to weekly/monthly for unlimited checks.')
+          return
+        }
+        throw new Error(payload.error || 'Check failed')
+      }
       setResult(payload)
     } catch (checkError) {
-      setError(checkError.message || 'Could not verify app')
+      setError(getFriendlyNetworkError(checkError))
     } finally {
       setLoading(false)
     }
@@ -130,6 +296,7 @@ function AppCheckPanel() {
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <SubscriptionSummary subscription={subscription} />
       <label className="text-sm text-gray-300">App name</label>
       <input
         value={appName}
@@ -160,7 +327,20 @@ function AppCheckPanel() {
       >
         {loading ? 'Checking...' : 'Check App'}
       </button>
-      {error && <p className="text-red-300 text-sm">{error}</p>}
+      {error && (
+        <div className="text-sm text-red-300">
+          <p>{error}</p>
+          {subscription && !subscription.unlimited && (
+            <button
+              type="button"
+              onClick={onUpgradeRequest}
+              className="mt-2 text-ghana-gold font-semibold hover:underline"
+            >
+              Upgrade now
+            </button>
+          )}
+        </div>
+      )}
       <ResultCard title="App authenticity check" result={result} />
     </form>
   )
@@ -182,12 +362,11 @@ function ReportPanel() {
     setLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE}/api/reports`, {
+      const { response, payload } = await requestJson(`${API_BASE}/api/reports`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, value, description, contact }),
       })
-      const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Report failed')
 
       setStatus('Thanks. Report submitted for review.')
@@ -195,7 +374,7 @@ function ReportPanel() {
       setDescription('')
       setContact('')
     } catch (submitError) {
-      setError(submitError.message || 'Could not submit report')
+      setError(getFriendlyNetworkError(submitError))
     } finally {
       setLoading(false)
     }
@@ -251,14 +430,353 @@ function ReportPanel() {
   )
 }
 
+function PlansPanel({
+  subscription,
+  loading,
+  activatingPlanId,
+  onActivatePlan,
+  paymentEmail,
+  onPaymentEmailChange,
+  paystackConfigured,
+  usingGooglePlay,
+  playBillingAvailable,
+  playBillingConfigured,
+  playProductsByPlan,
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-gray-300">
+        <p>
+          Current plan: <span className="text-ghana-gold font-bold">{subscription?.planLabel || '-'}</span>
+        </p>
+        {subscription?.unlimited ? (
+          <p className="text-emerald-300 mt-1">Unlimited checks active</p>
+        ) : (
+          <p className="text-amber-300 mt-1">
+            Free scans left today: {subscription?.scansRemainingToday ?? 0}
+          </p>
+        )}
+        {subscription?.expiresAt && (
+          <p className="text-gray-400 mt-1">Expires: {formatDate(subscription.expiresAt)}</p>
+        )}
+      </div>
+
+      {usingGooglePlay ? (
+        <div className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
+          <p className="text-sm text-gray-300 font-medium">Google Play Billing checkout enabled.</p>
+          {!playBillingConfigured && (
+            <p className="text-xs text-amber-300 mt-2">
+              Missing Play Billing product/base plan IDs. Set VITE_PLAY_BILLING_* vars and rebuild.
+            </p>
+          )}
+          {!playBillingAvailable && (
+            <p className="text-xs text-amber-300 mt-2">
+              Google Play Billing not available on this device yet.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
+          <label className="text-sm text-gray-300">Paystack payment email</label>
+          <input
+            type="email"
+            value={paymentEmail}
+            onChange={(event) => onPaymentEmailChange(event.target.value)}
+            placeholder="you@example.com"
+            className="mt-2 w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-ghana-gold"
+          />
+          {!paystackConfigured && (
+            <p className="text-xs text-amber-300 mt-2">
+              Paystack is not configured on backend yet. Add PAYSTACK_SECRET_KEY to backend `.env`.
+            </p>
+          )}
+        </div>
+      )}
+
+      {planCards.map((plan) => {
+        const isCurrent = subscription?.planId === plan.id
+        const isPaidPlan = plan.id !== 'free'
+        const storeProduct = playProductsByPlan?.[plan.id]
+        const dynamicPrice = usingGooglePlay && storeProduct?.priceString ? storeProduct.priceString : plan.price
+        const canStartGooglePlayPurchase = usingGooglePlay && playBillingConfigured && playBillingAvailable
+        const disablePaidAction = usingGooglePlay ? !canStartGooglePlayPurchase : !paystackConfigured
+        return (
+          <div key={plan.id} className="rounded-xl border border-white/10 bg-charcoal/60 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold text-white">{plan.title}</h3>
+                <p className="text-sm text-gray-400">{plan.detail}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-ghana-gold">{dynamicPrice}</p>
+                <p className="text-xs text-gray-400">{plan.subtitle}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={!isPaidPlan || isCurrent || loading || activatingPlanId === plan.id || disablePaidAction}
+              onClick={() => onActivatePlan(plan.id)}
+              className="mt-3 w-full rounded-xl bg-ghana-gold text-black font-semibold py-2.5 disabled:opacity-55"
+            >
+              {isCurrent
+                ? 'Current plan'
+                : activatingPlanId === plan.id
+                  ? usingGooglePlay ? 'Opening Google Play...' : 'Opening Paystack...'
+                  : isPaidPlan
+                    ? usingGooglePlay
+                      ? 'Pay with Google Play'
+                      : `Pay with Paystack (${plan.price})`
+                    : 'Default plan'}
+            </button>
+          </div>
+        )
+      })}
+      <p className="text-xs text-gray-500">
+        Weekly plan costs GHS 5 and monthly plan costs GHS 15. Both unlock unlimited daily scans.
+      </p>
+    </div>
+  )
+}
+
 function ScamShieldApp() {
   const [tab, setTab] = useState('url')
+  const [deviceId] = useState(() => getOrCreateDeviceId())
+  const [isAndroidNative] = useState(() => isAndroidNativePlatform())
+  const [paymentEmail, setPaymentEmail] = useState(() => getSavedPaymentEmail())
+  const [subscription, setSubscription] = useState(null)
+  const [paystackConfigured, setPaystackConfigured] = useState(false)
+  const [playBillingAvailable, setPlayBillingAvailable] = useState(false)
+  const [playProductsByPlan, setPlayProductsByPlan] = useState({})
+  const [loadingSubscription, setLoadingSubscription] = useState(true)
+  const [subscriptionError, setSubscriptionError] = useState('')
+  const [activatingPlanId, setActivatingPlanId] = useState('')
+  const [paymentNotice, setPaymentNotice] = useState('')
+  const [billingNotice, setBillingNotice] = useState('')
+  const playBillingConfigured = hasCompletePlayBillingConfig()
+  const usingGooglePlay = isAndroidNative
 
-  const ActivePanel = useMemo(() => {
-    if (tab === 'app') return AppCheckPanel
-    if (tab === 'report') return ReportPanel
-    return UrlScanPanel
-  }, [tab])
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAYMENT_EMAIL_KEY, paymentEmail)
+    } catch {
+      // ignore storage errors
+    }
+  }, [paymentEmail])
+
+  useEffect(() => {
+    const initGooglePlay = async () => {
+      if (!usingGooglePlay) return
+
+      try {
+        const billingSupport = await isPlayBillingSupported()
+        setPlayBillingAvailable(billingSupport.supported)
+        if (!billingSupport.supported) {
+          setBillingNotice(billingSupport.reason || 'Google Play Billing is not available.')
+          return
+        }
+
+        if (!playBillingConfigured) {
+          setBillingNotice('Google Play Billing IDs are missing from VITE_PLAY_BILLING_* environment variables.')
+          return
+        }
+
+        const products = await loadPlayBillingProducts()
+        const nextByPlan = {}
+
+        for (const product of products) {
+          if (product.planIdentifier === import.meta.env.VITE_PLAY_BILLING_WEEKLY_PRODUCT_ID) {
+            nextByPlan.weekly = product
+          }
+          if (product.planIdentifier === import.meta.env.VITE_PLAY_BILLING_MONTHLY_PRODUCT_ID) {
+            nextByPlan.monthly = product
+          }
+        }
+
+        setPlayProductsByPlan(nextByPlan)
+        setBillingNotice('')
+      } catch (error) {
+        setBillingNotice(getFriendlyPurchaseError(error))
+      }
+    }
+
+    initGooglePlay()
+  }, [playBillingConfigured, usingGooglePlay])
+
+  const loadSubscription = useCallback(async () => {
+    setSubscriptionError('')
+    setLoadingSubscription(true)
+    try {
+      const { response, payload } = await requestJson(
+        `${API_BASE}/api/subscription/status?deviceId=${encodeURIComponent(deviceId)}`,
+        { headers: { 'x-device-id': deviceId } }
+      )
+      if (!response.ok) throw new Error(payload.error || 'Failed to load subscription')
+      setSubscription(payload.subscription)
+      setPaystackConfigured(Boolean(payload.paystackConfigured))
+    } catch (error) {
+      setSubscriptionError(getFriendlyNetworkError(error))
+    } finally {
+      setLoadingSubscription(false)
+    }
+  }, [deviceId])
+
+  const verifyPaystackReference = useCallback(async (reference) => {
+    try {
+      setSubscriptionError('')
+      setPaymentNotice('Verifying Paystack payment...')
+      const { response, payload } = await requestJson(`${API_BASE}/api/subscription/paystack/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ reference }),
+      })
+
+      if (!response.ok) throw new Error(payload.error || 'Payment verification failed')
+      setSubscription(payload.subscription)
+      setTab('subscription')
+      setPaymentNotice('Payment successful. Subscription activated.')
+      await loadSubscription()
+    } catch (error) {
+      setPaymentNotice('')
+      setSubscriptionError(getFriendlyNetworkError(error))
+    }
+  }, [deviceId, loadSubscription])
+
+  useEffect(() => {
+    loadSubscription()
+  }, [loadSubscription])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const reference = searchParams.get('reference') || searchParams.get('trxref')
+    if (!reference) return
+
+    verifyPaystackReference(reference)
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [verifyPaystackReference])
+
+  const handleActivatePlan = async (planId) => {
+    setSubscriptionError('')
+    setPaymentNotice('')
+    setActivatingPlanId(planId)
+    if (usingGooglePlay) {
+      try {
+        const transaction = await purchasePlanWithGooglePlay({
+          planId,
+          appAccountToken: deviceId,
+        })
+
+        const { response, payload } = await requestJson(`${API_BASE}/api/subscription/google-play/activate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-device-id': deviceId,
+          },
+          body: JSON.stringify({ deviceId, planId, transaction }),
+        })
+
+        if (!response.ok) throw new Error(payload.error || 'Could not activate Google Play subscription')
+        setSubscription(payload.subscription)
+        setPaymentNotice(payload.message || 'Google Play subscription activated.')
+        setTab('subscription')
+      } catch (error) {
+        setSubscriptionError(getFriendlyPurchaseError(error))
+      } finally {
+        setActivatingPlanId('')
+      }
+
+      return
+    }
+
+    if (!paymentEmail || !paymentEmail.includes('@')) {
+      setSubscriptionError('Enter a valid payment email before continuing to Paystack.')
+      setActivatingPlanId('')
+      return
+    }
+
+    try {
+      const { response, payload } = await requestJson(`${API_BASE}/api/subscription/paystack/initialize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ deviceId, planId, email: paymentEmail }),
+      })
+
+      if (!response.ok) throw new Error(payload.error || 'Could not start Paystack payment')
+      if (!payload.authorizationUrl) throw new Error('No Paystack authorization URL returned')
+
+      window.location.assign(payload.authorizationUrl)
+    } catch (error) {
+      setSubscriptionError(getFriendlyNetworkError(error))
+      setActivatingPlanId('')
+    }
+  }
+
+  const handleSubscriptionChange = useCallback((nextSubscription) => {
+    if (!nextSubscription) return
+    setSubscription(nextSubscription)
+  }, [])
+
+  const activePanel = useMemo(() => {
+    if (tab === 'url') {
+      return (
+        <UrlScanPanel
+          deviceId={deviceId}
+          subscription={subscription}
+          onSubscriptionChange={handleSubscriptionChange}
+          onUpgradeRequest={() => setTab('subscription')}
+        />
+      )
+    }
+
+    if (tab === 'app') {
+      return (
+        <AppCheckPanel
+          deviceId={deviceId}
+          subscription={subscription}
+          onSubscriptionChange={handleSubscriptionChange}
+          onUpgradeRequest={() => setTab('subscription')}
+        />
+      )
+    }
+
+    if (tab === 'report') {
+      return <ReportPanel />
+    }
+
+    return (
+      <PlansPanel
+        subscription={subscription}
+        loading={loadingSubscription}
+        activatingPlanId={activatingPlanId}
+        onActivatePlan={handleActivatePlan}
+        paymentEmail={paymentEmail}
+        onPaymentEmailChange={setPaymentEmail}
+        paystackConfigured={paystackConfigured}
+        usingGooglePlay={usingGooglePlay}
+        playBillingAvailable={playBillingAvailable}
+        playBillingConfigured={playBillingConfigured}
+        playProductsByPlan={playProductsByPlan}
+      />
+    )
+  }, [
+    activatingPlanId,
+    deviceId,
+    handleSubscriptionChange,
+    loadingSubscription,
+    paymentEmail,
+    paystackConfigured,
+    playBillingAvailable,
+    playBillingConfigured,
+    playProductsByPlan,
+    subscription,
+    tab,
+    usingGooglePlay,
+  ])
 
   return (
     <div className="min-h-screen bg-deep-black text-white px-4 py-6">
@@ -277,17 +795,31 @@ function ScamShieldApp() {
               <p className="font-bold text-ghana-gold">URL + App</p>
             </div>
             <div className="rounded-xl border border-white/10 p-2 text-center">
-              <p className="text-xs text-gray-400">Mode</p>
-              <p className="font-bold text-amber-300">Low-cost MVP</p>
+              <p className="text-xs text-gray-400">Freemium</p>
+              <p className="font-bold text-amber-300">1/day</p>
             </div>
             <div className="rounded-xl border border-white/10 p-2 text-center">
-              <p className="text-xs text-gray-400">Action</p>
-              <p className="font-bold text-emerald-300">Report scams</p>
+              <p className="text-xs text-gray-400">Unlimited</p>
+              <p className="font-bold text-emerald-300">GHS 5 / GHS 15</p>
             </div>
           </div>
+          {subscription && (
+            <div className="mt-3 text-xs text-gray-400">
+              Plan:{' '}
+              <span className="text-ghana-gold font-semibold">{subscription.planLabel}</span>
+              {!subscription.unlimited && (
+                <span className="ml-2">
+                  ({subscription.scansRemainingToday}/{subscription.todayLimit} scans left today)
+                </span>
+              )}
+            </div>
+          )}
+          {paymentNotice && <p className="mt-2 text-xs text-emerald-300">{paymentNotice}</p>}
+          {billingNotice && <p className="mt-2 text-xs text-amber-300">{billingNotice}</p>}
+          {subscriptionError && <p className="mt-2 text-xs text-red-300">{subscriptionError}</p>}
         </header>
 
-        <nav className="grid grid-cols-3 gap-2">
+        <nav className="grid grid-cols-4 gap-2">
           {tabs.map((item) => {
             const Icon = item.icon
             const active = item.id === tab
@@ -309,7 +841,7 @@ function ScamShieldApp() {
         </nav>
 
         <section className="rounded-2xl border border-white/10 bg-charcoal/40 p-4">
-          <ActivePanel />
+          {activePanel}
         </section>
 
         <footer className="text-xs text-gray-500 text-center space-y-1 pb-4">
@@ -323,7 +855,7 @@ function ScamShieldApp() {
           </p>
           <p className="flex items-center justify-center gap-1">
             <Send className="w-3 h-3" />
-            Publish to Play Store after policy and privacy review.
+            Paid plans: GHS 5 weekly unlimited, GHS 15 monthly unlimited.
           </p>
         </footer>
       </div>

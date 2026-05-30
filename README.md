@@ -28,6 +28,12 @@ The project ships as a React app wrapped with Capacitor for Android (Google Play
   - Users submit suspicious URL/app + context
   - Reports stored for moderation and future blacklist updates
 
+- **Subscription + Usage Control**
+  - Freemium: **1 scan per day**
+  - Weekly plan: **GHS 5** for unlimited scans (7 days)
+  - Monthly plan: **GHS 15** for unlimited scans (30 days)
+  - Enforced server-side by device ID
+
 ### Monetization-ready positioning
 
 - Free tier: limited scans/day + report tools
@@ -55,6 +61,8 @@ The project ships as a React app wrapped with Capacitor for Android (Google Play
 - `backend/data/fake_domains.json` - known scam domains
 - `backend/data/trusted_brands.json` - verified brands/domains/packages
 - `backend/data/reports.json` - incoming user scam reports
+- `backend/data/subscriptions.json` - device plans and daily scan usage
+- `backend/data/google_play_purchases.json` - processed Google Play purchase tokens
 
 ---
 
@@ -68,7 +76,8 @@ Base URL local backend: `http://localhost:3001`
 
 ```json
 {
-  "url": "https://mtn-momo-security-check.xyz/login"
+  "url": "https://mtn-momo-security-check.xyz/login",
+  "deviceId": "your-device-id"
 }
 ```
 
@@ -80,7 +89,8 @@ Base URL local backend: `http://localhost:3001`
 {
   "appName": "MTN MoMo Wallet",
   "packageName": "com.fake.mtn.wallet",
-  "developerName": "MTN Official Ltd"
+  "developerName": "MTN Official Ltd",
+  "deviceId": "your-device-id"
 }
 ```
 
@@ -100,6 +110,60 @@ Base URL local backend: `http://localhost:3001`
 ### List reports (admin/dev use)
 
 `GET /api/reports`
+
+### Subscription status
+
+`GET /api/subscription/status?deviceId=your-device-id`
+
+### Activate paid plan
+
+`POST /api/subscription/activate`
+
+```json
+{
+  "deviceId": "your-device-id",
+  "planId": "weekly"
+}
+```
+
+### Initialize Paystack subscription payment
+
+`POST /api/subscription/paystack/initialize`
+
+```json
+{
+  "deviceId": "your-device-id",
+  "planId": "weekly",
+  "email": "you@example.com"
+}
+```
+
+### Verify Paystack subscription payment
+
+`POST /api/subscription/paystack/verify`
+
+```json
+{
+  "reference": "SUB-weekly-1234abcd"
+}
+```
+
+### Activate subscription from Google Play purchase
+
+`POST /api/subscription/google-play/activate`
+
+```json
+{
+  "deviceId": "your-device-id",
+  "planId": "weekly",
+  "transaction": {
+    "transactionId": "GPA.1234-5678-9012-34567",
+    "productIdentifier": "com.addo.safelinkghana.weekly_unlimited",
+    "purchaseToken": "purchase-token-from-play",
+    "purchaseState": "1"
+  }
+}
+```
 
 ---
 
@@ -159,8 +223,27 @@ npm run dev
 
 - `PORT=3001`
 - `FRONTEND_URL=http://localhost:5173`
+- `PAYSTACK_SECRET_KEY=sk_test_xxx`
+- `ALLOW_MANUAL_SUBSCRIPTION_ACTIVATION=false`
+- `PLAY_BILLING_WEEKLY_PRODUCT_ID=com.addo.safelinkghana.weekly_unlimited`
+- `PLAY_BILLING_WEEKLY_PLAN_ID=weekly-plan`
+- `PLAY_BILLING_MONTHLY_PRODUCT_ID=com.addo.safelinkghana.monthly_unlimited`
+- `PLAY_BILLING_MONTHLY_PLAN_ID=monthly-plan`
 
 `VITE_API_BASE_URL` can be set in frontend environment for production.
+
+For Google Play Billing in frontend (`.env.local` or `.env.production`), set:
+
+```env
+VITE_PLAY_BILLING_WEEKLY_PRODUCT_ID=com.addo.safelinkghana.weekly_unlimited
+VITE_PLAY_BILLING_WEEKLY_PLAN_ID=weekly-plan
+VITE_PLAY_BILLING_MONTHLY_PRODUCT_ID=com.addo.safelinkghana.monthly_unlimited
+VITE_PLAY_BILLING_MONTHLY_PLAN_ID=monthly-plan
+```
+
+If the app shows **"Failed to fetch"**, your frontend cannot reach backend:
+- ensure backend is running on `http://localhost:3001`
+- or set frontend `VITE_API_BASE_URL` to your deployed backend URL.
 
 ---
 
@@ -189,7 +272,7 @@ npm run dev
 1. Add Play Integrity + device attestation
 2. Add abuse rate-limiting and API keys
 3. Migrate JSON files to Postgres/Supabase
-4. Add paid subscriptions (Google Play Billing)
+4. Integrate real payment collection for subscriptions (Google Play Billing / Paystack)
 5. Add automated phishing feeds and admin moderation panel
 
 ---
