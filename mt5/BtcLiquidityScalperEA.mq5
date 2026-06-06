@@ -1,8 +1,16 @@
 #property strict
 #property description "BTC scalping EA for MT5 (Exness-friendly symbol resolution)"
-#property version   "1.00"
+#property version   "1.10"
 
 #include <Trade/Trade.mqh>
+
+enum SessionProfileType
+{
+   SESSION_PROFILE_NONE = 0,
+   SESSION_PROFILE_ASIA = 1,
+   SESSION_PROFILE_LONDON = 2,
+   SESSION_PROFILE_NEWYORK = 3
+};
 
 input string          InpSymbolHint               = "BTCUSD";
 input ENUM_TIMEFRAMES InpTradeTF                  = PERIOD_M5;
@@ -36,15 +44,53 @@ input double          InpVolumeSpikeMultiplier    = 1.20;
 input bool            InpRequireTrendAlignment    = true;
 input int             InpMinSetupScore            = 75;
 
+input bool            InpUseStructureFilter       = true;
+input int             InpStructureLookbackBars    = 120;
+input int             InpSwingStrength            = 2;
+input bool            InpAllowChochReversal       = true;
+
 input bool            InpUseBreakEven             = true;
 input double          InpBreakEvenAtR             = 0.80;
 input int             InpBreakEvenLockPoints      = 40;
 input bool            InpUseAtrTrail              = true;
 input double          InpAtrTrailMultiplier       = 0.90;
 
+input bool            InpUsePartialTakeProfit     = true;
+input double          InpPartialTakeProfitAtR     = 1.00;
+input double          InpPartialTakeProfitPercent = 50.0;
+
 input bool            InpUseSessionFilter         = true;
 input int             InpSessionStartHourServer   = 7;
 input int             InpSessionEndHourServer     = 21;
+
+input bool            InpUseSessionProfiles       = true;
+input bool            InpEnableAsiaSession        = true;
+input int             InpAsiaStartHour            = 0;
+input int             InpAsiaEndHour              = 8;
+input int             InpAsiaMinSetupScore        = 82;
+input double          InpAsiaRiskMultiplier       = 0.70;
+input double          InpAsiaRiskRewardMultiplier = 0.95;
+input int             InpAsiaMaxSpreadPoints      = 280;
+
+input bool            InpEnableLondonSession      = true;
+input int             InpLondonStartHour          = 7;
+input int             InpLondonEndHour            = 16;
+input int             InpLondonMinSetupScore      = 75;
+input double          InpLondonRiskMultiplier     = 1.00;
+input double          InpLondonRiskRewardMultiplier = 1.15;
+input int             InpLondonMaxSpreadPoints    = 350;
+
+input bool            InpEnableNewYorkSession     = true;
+input int             InpNewYorkStartHour         = 13;
+input int             InpNewYorkEndHour           = 21;
+input int             InpNewYorkMinSetupScore     = 78;
+input double          InpNewYorkRiskMultiplier    = 0.90;
+input double          InpNewYorkRiskRewardMultiplier = 1.05;
+input int             InpNewYorkMaxSpreadPoints   = 320;
+
+input bool            InpUseNewsBlackout          = true;
+input string          InpNewsBlackoutWeekdays     = "1,2,3,4,5";
+input string          InpNewsBlackoutWindowsServer = "13:20-13:50;15:50-16:10";
 
 CTrade trade;
 
@@ -67,6 +113,262 @@ string ToUpperCopy(string value)
 {
    StringToUpper(value);
    return value;
+}
+
+string TrimCopy(string value)
+{
+   StringTrimLeft(value);
+   StringTrimRight(value);
+   return value;
+}
+
+string PositionMetaKey(const ulong positionId, const string suffix)
+{
+   return "BLS_" + (string)InpMagicNumber + "_" + (string)positionId + "_" + suffix;
+}
+
+void SetPositionMeta(const ulong positionId, const double initialSL, const double initialVolume)
+{
+   if(positionId == 0)
+      return;
+
+   GlobalVariableSet(PositionMetaKey(positionId, "sl"), initialSL);
+   GlobalVariableSet(PositionMetaKey(positionId, "vol"), initialVolume);
+   GlobalVariableSet(PositionMetaKey(positionId, "partial"), 0.0);
+}
+
+bool GetPositionMeta(const ulong positionId, double &initialSL, double &initialVolume, bool &partialDone)
+{
+   string slKey = PositionMetaKey(positionId, "sl");
+   string volKey = PositionMetaKey(positionId, "vol");
+   string partialKey = PositionMetaKey(positionId, "partial");
+
+   if(!GlobalVariableCheck(slKey) || !GlobalVariableCheck(volKey))
+      return false;
+
+   initialSL = GlobalVariableGet(slKey);
+   initialVolume = GlobalVariableGet(volKey);
+   partialDone = (GlobalVariableCheck(partialKey) && GlobalVariableGet(partialKey) > 0.5);
+   return true;
+}
+
+void MarkPartialDone(const ulong positionId)
+{
+   if(positionId == 0)
+      return;
+
+   GlobalVariableSet(PositionMetaKey(positionId, "partial"), 1.0);
+}
+
+void ClearPositionMeta(const ulong positionId)
+{
+   if(positionId == 0)
+      return;
+
+   GlobalVariableDel(PositionMetaKey(positionId, "sl"));
+   GlobalVariableDel(PositionMetaKey(positionId, "vol"));
+   GlobalVariableDel(PositionMetaKey(positionId, "partial"));
+}
+
+bool CopyIndicatorValue(const int handle, const int shift, double &value)
+{
+   double temp[1];
+   if(CopyBuffer(handle, 0, shift, 1, temp) != 1)
+      return false;
+
+   value = temp[0];
+   return true;
+}
+
+bool IsHourInWindow(const int hour, const int startHour, const int endHour)
+{
+   if(startHour == endHour)
+      return true;
+
+   if(startHour < endHour)
+      return (hour >= startHour && hour < endHour);
+
+   return (hour >= startHour || hour < endHour);
+}
+
+bool IsMinuteInWindow(const int minuteOfDay, const int startMinute, const int endMinute)
+{
+   if(startMinute == endMinute)
+      return true;
+
+   if(startMinute < endMinute)
+      return (minuteOfDay >= startMinute && minuteOfDay < endMinute);
+
+   return (minuteOfDay >= startMinute || minuteOfDay < endMinute);
+}
+
+SessionProfileType GetCurrentSessionProfile()
+{
+   if(!InpUseSessionProfiles)
+      return SESSION_PROFILE_NONE;
+
+   MqlDateTime now;
+   TimeToStruct(TimeCurrent(), now);
+   int hour = now.hour;
+
+   if(InpEnableLondonSession && IsHourInWindow(hour, InpLondonStartHour, InpLondonEndHour))
+      return SESSION_PROFILE_LONDON;
+   if(InpEnableNewYorkSession && IsHourInWindow(hour, InpNewYorkStartHour, InpNewYorkEndHour))
+      return SESSION_PROFILE_NEWYORK;
+   if(InpEnableAsiaSession && IsHourInWindow(hour, InpAsiaStartHour, InpAsiaEndHour))
+      return SESSION_PROFILE_ASIA;
+
+   return SESSION_PROFILE_NONE;
+}
+
+int GetActiveMinSetupScore()
+{
+   SessionProfileType profile = GetCurrentSessionProfile();
+   if(profile == SESSION_PROFILE_ASIA)
+      return InpAsiaMinSetupScore;
+   if(profile == SESSION_PROFILE_LONDON)
+      return InpLondonMinSetupScore;
+   if(profile == SESSION_PROFILE_NEWYORK)
+      return InpNewYorkMinSetupScore;
+
+   return InpMinSetupScore;
+}
+
+double GetActiveRiskMultiplier()
+{
+   SessionProfileType profile = GetCurrentSessionProfile();
+   if(profile == SESSION_PROFILE_ASIA)
+      return InpAsiaRiskMultiplier;
+   if(profile == SESSION_PROFILE_LONDON)
+      return InpLondonRiskMultiplier;
+   if(profile == SESSION_PROFILE_NEWYORK)
+      return InpNewYorkRiskMultiplier;
+
+   return 1.0;
+}
+
+double GetActiveRiskRewardMultiplier()
+{
+   SessionProfileType profile = GetCurrentSessionProfile();
+   if(profile == SESSION_PROFILE_ASIA)
+      return InpAsiaRiskRewardMultiplier;
+   if(profile == SESSION_PROFILE_LONDON)
+      return InpLondonRiskRewardMultiplier;
+   if(profile == SESSION_PROFILE_NEWYORK)
+      return InpNewYorkRiskRewardMultiplier;
+
+   return 1.0;
+}
+
+int GetActiveMaxSpreadPoints()
+{
+   SessionProfileType profile = GetCurrentSessionProfile();
+   if(profile == SESSION_PROFILE_ASIA)
+      return InpAsiaMaxSpreadPoints;
+   if(profile == SESSION_PROFILE_LONDON)
+      return InpLondonMaxSpreadPoints;
+   if(profile == SESSION_PROFILE_NEWYORK)
+      return InpNewYorkMaxSpreadPoints;
+
+   return InpMaxSpreadPoints;
+}
+
+double GetActiveRiskPercent()
+{
+   double risk = InpRiskPercentPerTrade * GetActiveRiskMultiplier();
+   return MathMax(0.05, risk);
+}
+
+double GetActiveRiskReward()
+{
+   double rr = InpRiskReward * GetActiveRiskRewardMultiplier();
+   return MathMax(0.60, rr);
+}
+
+bool ContainsIntInCsv(const string csv, const int target)
+{
+   string trimmedCsv = TrimCopy(csv);
+   if(trimmedCsv == "")
+      return true;
+
+   string tokens[];
+   int count = StringSplit(trimmedCsv, ',', tokens);
+   if(count <= 0)
+      return false;
+
+   for(int i = 0; i < count; i++)
+   {
+      string item = TrimCopy(tokens[i]);
+      if(item == "")
+         continue;
+
+      if((int)StringToInteger(item) == target)
+         return true;
+   }
+
+   return false;
+}
+
+bool ParseHourMinute(const string hhmm, int &minuteOfDay)
+{
+   string text = TrimCopy(hhmm);
+   string parts[];
+   int count = StringSplit(text, ':', parts);
+   if(count != 2)
+      return false;
+
+   int hour = (int)StringToInteger(TrimCopy(parts[0]));
+   int minute = (int)StringToInteger(TrimCopy(parts[1]));
+   if(hour < 0 || hour > 23 || minute < 0 || minute > 59)
+      return false;
+
+   minuteOfDay = hour * 60 + minute;
+   return true;
+}
+
+bool ParseNewsWindow(const string token, int &startMinute, int &endMinute)
+{
+   string text = TrimCopy(token);
+   if(text == "")
+      return false;
+
+   string parts[];
+   int count = StringSplit(text, '-', parts);
+   if(count != 2)
+      return false;
+
+   return ParseHourMinute(parts[0], startMinute) && ParseHourMinute(parts[1], endMinute);
+}
+
+bool IsNewsBlackoutNow()
+{
+   if(!InpUseNewsBlackout)
+      return false;
+
+   MqlDateTime now;
+   TimeToStruct(TimeCurrent(), now);
+
+   if(!ContainsIntInCsv(InpNewsBlackoutWeekdays, now.day_of_week))
+      return false;
+
+   int minuteOfDay = now.hour * 60 + now.min;
+   string windows[];
+   int count = StringSplit(InpNewsBlackoutWindowsServer, ';', windows);
+   if(count <= 0)
+      return false;
+
+   for(int i = 0; i < count; i++)
+   {
+      int startMinute = 0;
+      int endMinute = 0;
+      if(!ParseNewsWindow(windows[i], startMinute, endMinute))
+         continue;
+
+      if(IsMinuteInWindow(minuteOfDay, startMinute, endMinute))
+         return true;
+   }
+
+   return false;
 }
 
 string ResolveBtcSymbol()
@@ -99,15 +401,6 @@ string ResolveBtcSymbol()
    return fallback;
 }
 
-bool CopyIndicatorValue(const int handle, const int shift, double &value)
-{
-   double temp[1];
-   if(CopyBuffer(handle, 0, shift, 1, temp) != 1)
-      return false;
-   value = temp[0];
-   return true;
-}
-
 bool IsNewBar()
 {
    datetime times[1];
@@ -137,26 +430,19 @@ void RefreshDailyState()
 
 bool IsSessionAllowed()
 {
-   if(!InpUseSessionFilter)
-      return true;
-
    MqlDateTime now;
    TimeToStruct(TimeCurrent(), now);
 
    if(now.day_of_week == 0 || now.day_of_week == 6)
       return false;
 
-   int hour = now.hour;
-   int startHour = InpSessionStartHourServer;
-   int endHour = InpSessionEndHourServer;
+   if(InpUseSessionProfiles)
+      return (GetCurrentSessionProfile() != SESSION_PROFILE_NONE);
 
-   if(startHour == endHour)
+   if(!InpUseSessionFilter)
       return true;
 
-   if(startHour < endHour)
-      return (hour >= startHour && hour < endHour);
-
-   return (hour >= startHour || hour < endHour);
+   return IsHourInWindow(now.hour, InpSessionStartHourServer, InpSessionEndHourServer);
 }
 
 bool DailyLossExceeded()
@@ -203,10 +489,10 @@ ulong GetOpenPositionTicket()
    return 0;
 }
 
-bool IsSpreadHealthy()
+bool IsSpreadHealthy(const int spreadLimitPoints)
 {
    long spread = SymbolInfoInteger(g_symbol, SYMBOL_SPREAD);
-   return (spread >= 0 && spread <= InpMaxSpreadPoints);
+   return (spread >= 0 && spread <= spreadLimitPoints);
 }
 
 bool IsVolatilityHealthy()
@@ -334,6 +620,114 @@ bool DetectExhaustion(const bool bullish)
    return (rsi >= InpRsiOverbought && close1 < open1);
 }
 
+bool IsSwingHighAt(const int shift, const int strength)
+{
+   double candidate = iHigh(g_symbol, InpTradeTF, shift);
+   if(candidate <= 0.0)
+      return false;
+
+   for(int k = 1; k <= strength; k++)
+   {
+      double left = iHigh(g_symbol, InpTradeTF, shift + k);
+      double right = iHigh(g_symbol, InpTradeTF, shift - k);
+      if(candidate <= left || candidate <= right)
+         return false;
+   }
+
+   return true;
+}
+
+bool IsSwingLowAt(const int shift, const int strength)
+{
+   double candidate = iLow(g_symbol, InpTradeTF, shift);
+   if(candidate <= 0.0)
+      return false;
+
+   for(int k = 1; k <= strength; k++)
+   {
+      double left = iLow(g_symbol, InpTradeTF, shift + k);
+      double right = iLow(g_symbol, InpTradeTF, shift - k);
+      if(candidate >= left || candidate >= right)
+         return false;
+   }
+
+   return true;
+}
+
+bool FindRecentSwingStructure(double &latestHigh, double &priorHigh, double &latestLow, double &priorLow)
+{
+   int bars = iBars(g_symbol, InpTradeTF);
+   int strength = MathMax(1, InpSwingStrength);
+   int maxShift = MathMin(InpStructureLookbackBars, bars - strength - 1);
+
+   if(maxShift <= strength + 1)
+      return false;
+
+   int foundHigh = 0;
+   int foundLow = 0;
+
+   for(int shift = strength + 1; shift <= maxShift; shift++)
+   {
+      if(foundHigh < 2 && IsSwingHighAt(shift, strength))
+      {
+         if(foundHigh == 0)
+            latestHigh = iHigh(g_symbol, InpTradeTF, shift);
+         else
+            priorHigh = iHigh(g_symbol, InpTradeTF, shift);
+         foundHigh++;
+      }
+
+      if(foundLow < 2 && IsSwingLowAt(shift, strength))
+      {
+         if(foundLow == 0)
+            latestLow = iLow(g_symbol, InpTradeTF, shift);
+         else
+            priorLow = iLow(g_symbol, InpTradeTF, shift);
+         foundLow++;
+      }
+
+      if(foundHigh >= 2 && foundLow >= 2)
+         return true;
+   }
+
+   return false;
+}
+
+bool PassStructureFilter(const bool bullish, bool &isBos, bool &isChoch)
+{
+   isBos = false;
+   isChoch = false;
+
+   if(!InpUseStructureFilter)
+      return true;
+
+   double latestHigh = 0.0, priorHigh = 0.0, latestLow = 0.0, priorLow = 0.0;
+   if(!FindRecentSwingStructure(latestHigh, priorHigh, latestLow, priorLow))
+      return false;
+
+   double close1 = iClose(g_symbol, InpTradeTF, 1);
+
+   bool bosBull = (latestHigh > priorHigh && latestLow > priorLow);
+   bool bosBear = (latestHigh < priorHigh && latestLow < priorLow);
+   bool chochBull = (close1 > priorHigh && latestLow <= priorLow);
+   bool chochBear = (close1 < priorLow && latestHigh >= priorHigh);
+
+   if(bullish)
+   {
+      isBos = bosBull;
+      isChoch = chochBull;
+      if(isBos)
+         return true;
+      return (InpAllowChochReversal && isChoch);
+   }
+
+   isBos = bosBear;
+   isChoch = chochBear;
+   if(isBos)
+      return true;
+   return (InpAllowChochReversal && isChoch);
+}
+
 double NormalizeVolume(double volume)
 {
    double minVolume = SymbolInfoDouble(g_symbol, SYMBOL_VOLUME_MIN);
@@ -347,9 +741,9 @@ double NormalizeVolume(double volume)
    return NormalizeDouble(volume, 2);
 }
 
-double CalculatePositionVolume(const double entryPrice, const double stopPrice)
+double CalculatePositionVolume(const double entryPrice, const double stopPrice, const double riskPercent)
 {
-   double riskMoney = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPercentPerTrade / 100.0);
+   double riskMoney = AccountInfoDouble(ACCOUNT_BALANCE) * (riskPercent / 100.0);
    if(riskMoney <= 0.0)
       return 0.0;
 
@@ -370,6 +764,43 @@ double CalculatePositionVolume(const double entryPrice, const double stopPrice)
    return NormalizeVolume(rawVolume);
 }
 
+double CalculatePositionClosedProfit(const ulong positionId)
+{
+   if(positionId == 0)
+      return 0.0;
+
+   datetime toTime = TimeCurrent() + 60;
+   datetime fromTime = TimeCurrent() - (60 * 60 * 24 * 45);
+   if(!HistorySelect(fromTime, toTime))
+      return 0.0;
+
+   double profit = 0.0;
+   int deals = HistoryDealsTotal();
+   for(int i = 0; i < deals; i++)
+   {
+      ulong dealTicket = HistoryDealGetTicket(i);
+      if(dealTicket == 0)
+         continue;
+
+      if((ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID) != positionId)
+         continue;
+      if(HistoryDealGetString(dealTicket, DEAL_SYMBOL) != g_symbol)
+         continue;
+      if((ulong)HistoryDealGetInteger(dealTicket, DEAL_MAGIC) != InpMagicNumber)
+         continue;
+
+      long entryType = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+      if(entryType == DEAL_ENTRY_OUT || entryType == DEAL_ENTRY_OUT_BY)
+      {
+         profit += HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+         profit += HistoryDealGetDouble(dealTicket, DEAL_SWAP);
+         profit += HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      }
+   }
+
+   return profit;
+}
+
 bool TradeAllowedNow()
 {
    if(g_todayTrades >= InpMaxTradesPerDay)
@@ -387,7 +818,10 @@ bool TradeAllowedNow()
    if(!IsSessionAllowed())
       return false;
 
-   if(!IsSpreadHealthy())
+   if(IsNewsBlackoutNow())
+      return false;
+
+   if(!IsSpreadHealthy(GetActiveMaxSpreadPoints()))
       return false;
 
    if(!IsVolatilityHealthy())
@@ -396,18 +830,28 @@ bool TradeAllowedNow()
    return true;
 }
 
-int BuildSetupScore(const bool bullish, const bool sweep, const bool exhaustion, const bool trendAligned, const bool volumeSpike)
+int BuildSetupScore(const bool bullish,
+                   const bool sweep,
+                   const bool exhaustion,
+                   const bool trendAligned,
+                   const bool volumeSpike,
+                   const bool isBos,
+                   const bool isChoch)
 {
    int score = 0;
 
    if(sweep)
-      score += 45;
+      score += 40;
    if(exhaustion)
-      score += 25;
+      score += 20;
    if(trendAligned)
-      score += 15;
+      score += 12;
    if(volumeSpike)
       score += 10;
+   if(isBos)
+      score += 10;
+   if(isChoch)
+      score += 8;
 
    double rsi = 50.0;
    if(CopyIndicatorValue(g_rsiHandle, 1, rsi))
@@ -431,20 +875,50 @@ void ManageOpenPosition()
    double entry = PositionGetDouble(POSITION_PRICE_OPEN);
    double sl = PositionGetDouble(POSITION_SL);
    double tp = PositionGetDouble(POSITION_TP);
+   double volume = PositionGetDouble(POSITION_VOLUME);
+   ulong positionId = (ulong)PositionGetInteger(POSITION_IDENTIFIER);
    double point = SymbolInfoDouble(g_symbol, SYMBOL_POINT);
    double bid = SymbolInfoDouble(g_symbol, SYMBOL_BID);
    double ask = SymbolInfoDouble(g_symbol, SYMBOL_ASK);
-   if(point <= 0.0)
+   if(point <= 0.0 || volume <= 0.0)
+      return;
+
+   double initialSL = sl;
+   double initialVolume = volume;
+   bool partialDone = false;
+   GetPositionMeta(positionId, initialSL, initialVolume, partialDone);
+
+   double initialRisk = MathAbs(entry - initialSL);
+   if(initialRisk <= 0.0)
+      initialRisk = MathAbs(entry - sl);
+   if(initialRisk <= 0.0)
       return;
 
    if(type == POSITION_TYPE_BUY)
    {
       double current = bid;
-      double initialRisk = MathAbs(entry - sl);
-      if(initialRisk <= 0.0)
-         return;
+      double rNow = (current - entry) / initialRisk;
 
-      if(InpUseBreakEven && current - entry >= initialRisk * InpBreakEvenAtR)
+      if(InpUsePartialTakeProfit && !partialDone && rNow >= InpPartialTakeProfitAtR)
+      {
+         double step = SymbolInfoDouble(g_symbol, SYMBOL_VOLUME_STEP);
+         double minVolume = SymbolInfoDouble(g_symbol, SYMBOL_VOLUME_MIN);
+         double partialVolume = NormalizeVolume(volume * (InpPartialTakeProfitPercent / 100.0));
+
+         if(step > 0.0 && partialVolume >= volume)
+            partialVolume = NormalizeVolume(volume - step);
+
+         if(partialVolume >= minVolume && (volume - partialVolume) >= minVolume)
+         {
+            if(trade.PositionClosePartial(g_symbol, partialVolume, InpDeviationPoints))
+            {
+               MarkPartialDone(positionId);
+               partialDone = true;
+            }
+         }
+      }
+
+      if(InpUseBreakEven && rNow >= InpBreakEvenAtR)
       {
          double beSL = entry + (InpBreakEvenLockPoints * point);
          if(beSL > sl && beSL < current)
@@ -467,11 +941,28 @@ void ManageOpenPosition()
    if(type == POSITION_TYPE_SELL)
    {
       double current = ask;
-      double initialRisk = MathAbs(entry - sl);
-      if(initialRisk <= 0.0)
-         return;
+      double rNow = (entry - current) / initialRisk;
 
-      if(InpUseBreakEven && entry - current >= initialRisk * InpBreakEvenAtR)
+      if(InpUsePartialTakeProfit && !partialDone && rNow >= InpPartialTakeProfitAtR)
+      {
+         double step = SymbolInfoDouble(g_symbol, SYMBOL_VOLUME_STEP);
+         double minVolume = SymbolInfoDouble(g_symbol, SYMBOL_VOLUME_MIN);
+         double partialVolume = NormalizeVolume(volume * (InpPartialTakeProfitPercent / 100.0));
+
+         if(step > 0.0 && partialVolume >= volume)
+            partialVolume = NormalizeVolume(volume - step);
+
+         if(partialVolume >= minVolume && (volume - partialVolume) >= minVolume)
+         {
+            if(trade.PositionClosePartial(g_symbol, partialVolume, InpDeviationPoints))
+            {
+               MarkPartialDone(positionId);
+               partialDone = true;
+            }
+         }
+      }
+
+      if(InpUseBreakEven && rNow >= InpBreakEvenAtR)
       {
          double beSL = entry - (InpBreakEvenLockPoints * point);
          if((sl == 0.0 || beSL < sl) && beSL > current)
@@ -493,6 +984,11 @@ void ManageOpenPosition()
 
 void TryEnterTrade(const bool bullish)
 {
+   bool isBos = false;
+   bool isChoch = false;
+   if(!PassStructureFilter(bullish, isBos, isChoch))
+      return;
+
    double sweepLevel = 0.0;
    bool sweep = DetectLiquiditySweep(bullish, sweepLevel);
    if(!sweep)
@@ -505,8 +1001,8 @@ void TryEnterTrade(const bool bullish)
    if(InpRequireTrendAlignment && !trendAligned)
       return;
 
-   int score = BuildSetupScore(bullish, sweep, exhaustion, trendAligned, volumeSpike);
-   if(score < InpMinSetupScore)
+   int score = BuildSetupScore(bullish, sweep, exhaustion, trendAligned, volumeSpike, isBos, isChoch);
+   if(score < GetActiveMinSetupScore())
       return;
 
    double point = SymbolInfoDouble(g_symbol, SYMBOL_POINT);
@@ -514,6 +1010,8 @@ void TryEnterTrade(const bool bullish)
    double bid = SymbolInfoDouble(g_symbol, SYMBOL_BID);
    double low1 = iLow(g_symbol, InpTradeTF, 1);
    double high1 = iHigh(g_symbol, InpTradeTF, 1);
+   double rr = GetActiveRiskReward();
+   double riskPercent = GetActiveRiskPercent();
 
    double entry = bullish ? ask : bid;
    double stop = 0.0;
@@ -524,17 +1022,17 @@ void TryEnterTrade(const bool bullish)
       stop = MathMin(low1, sweepLevel) - (InpStopBufferPoints * point);
       if((entry - stop) / point < InpMinStopLossPoints)
          return;
-      take = entry + ((entry - stop) * InpRiskReward);
+      take = entry + ((entry - stop) * rr);
    }
    else
    {
       stop = MathMax(high1, sweepLevel) + (InpStopBufferPoints * point);
       if((stop - entry) / point < InpMinStopLossPoints)
          return;
-      take = entry - ((stop - entry) * InpRiskReward);
+      take = entry - ((stop - entry) * rr);
    }
 
-   double volume = CalculatePositionVolume(entry, stop);
+   double volume = CalculatePositionVolume(entry, stop, riskPercent);
    if(volume <= 0.0)
       return;
 
@@ -543,9 +1041,9 @@ void TryEnterTrade(const bool bullish)
 
    bool placed = false;
    if(bullish)
-      placed = trade.Buy(volume, g_symbol, 0.0, stop, take, "BTC sweep+exhaustion buy");
+      placed = trade.Buy(volume, g_symbol, 0.0, stop, take, "BTC scalper buy");
    else
-      placed = trade.Sell(volume, g_symbol, 0.0, stop, take, "BTC sweep+exhaustion sell");
+      placed = trade.Sell(volume, g_symbol, 0.0, stop, take, "BTC scalper sell");
 
    if(placed)
       g_lastEntryTime = TimeCurrent();
@@ -579,6 +1077,7 @@ int OnInit()
    }
 
    trade.SetExpertMagicNumber(InpMagicNumber);
+   trade.SetDeviationInPoints(InpDeviationPoints);
    RefreshDailyState();
 
    Print("BTC Liquidity Scalper initialized on symbol: ", g_symbol);
@@ -633,22 +1132,50 @@ void OnTradeTransaction(const MqlTradeTransaction &trans, const MqlTradeRequest 
    if(symbol != g_symbol || (ulong)magic != InpMagicNumber)
       return;
 
-   long entry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
-   if(entry == DEAL_ENTRY_IN)
+   long entryType = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+   ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+
+   if(entryType == DEAL_ENTRY_IN)
    {
       g_todayTrades++;
+
+      bool selected = false;
+      if(positionId > 0)
+         selected = PositionSelectByTicket(positionId);
+
+      if(!selected)
+         selected = PositionSelect(g_symbol);
+
+      if(selected)
+      {
+         ulong selectedId = (ulong)PositionGetInteger(POSITION_IDENTIFIER);
+         if(positionId == 0 || selectedId == positionId)
+         {
+            double initialSL = PositionGetDouble(POSITION_SL);
+            double initialVolume = PositionGetDouble(POSITION_VOLUME);
+            SetPositionMeta(selectedId, initialSL, initialVolume);
+         }
+      }
       return;
    }
 
-   if(entry == DEAL_ENTRY_OUT)
+   if(entryType == DEAL_ENTRY_OUT || entryType == DEAL_ENTRY_OUT_BY)
    {
-      double profit = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
-                    + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
-                    + HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      bool stillOpen = false;
+      if(positionId > 0 && PositionSelectByTicket(positionId))
+         stillOpen = ((ulong)PositionGetInteger(POSITION_IDENTIFIER) == positionId);
+      else if(PositionSelect(g_symbol))
+         stillOpen = ((ulong)PositionGetInteger(POSITION_IDENTIFIER) == positionId);
 
-      if(profit < 0.0)
+      if(stillOpen)
+         return;
+
+      double totalProfit = CalculatePositionClosedProfit(positionId);
+      if(totalProfit < 0.0)
          g_consecutiveLosses++;
-      else if(profit > 0.0)
+      else if(totalProfit > 0.0)
          g_consecutiveLosses = 0;
+
+      ClearPositionMeta(positionId);
    }
 }
