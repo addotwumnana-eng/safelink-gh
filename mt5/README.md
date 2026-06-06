@@ -65,6 +65,22 @@ This EA is designed to raise setup quality, reduce poor entries, and preserve ca
 5. Attach to BTC chart (recommended M5).
 6. Enable Algo Trading.
 
+## Ready preset files (requested)
+
+Two preset files are included in `mt5/presets/`:
+
+- `exness-btc-conservative.set`
+- `exness-btc-aggressive.set`
+
+### How to load a preset in MT5
+
+1. Open Strategy Tester and select `BtcLiquidityScalperEA`.
+2. Go to **Inputs** tab.
+3. Click **Load**.
+4. Choose one preset file from `mt5/presets/`.
+5. Confirm `InpSymbolHint` matches your exact Exness symbol.
+6. Run backtest, then forward-test on demo before live use.
+
 ## Core inputs to tune first
 
 - Symbol:
